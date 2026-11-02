@@ -1,0 +1,5 @@
+Manifest-Version: 1.0
+MixinConfigs: controlify.mixins.json
+Specification-Title: controlify
+Specification-Vendor: isXander
+Implementation-Vendor: isXander

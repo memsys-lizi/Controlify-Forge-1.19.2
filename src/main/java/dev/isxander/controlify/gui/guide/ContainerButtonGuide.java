@@ -12,8 +12,9 @@ import dev.isxander.controlify.gui.layout.ColumnLayoutComponent;
 import dev.isxander.controlify.gui.layout.PositionedComponent;
 import dev.isxander.controlify.gui.layout.RowLayoutComponent;
 import dev.isxander.controlify.mixins.feature.guide.screen.AbstractContainerScreenAccessor;
-import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.minecraft.client.Minecraft;
+import net.minecraftforge.client.event.ScreenEvent;
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
@@ -25,24 +26,23 @@ public final class ContainerButtonGuide {
     private static PositionedComponent<ColumnLayoutComponent<RowLayoutComponent<GuideActionRenderer<ContainerGuideCtx>>>> rightLayout;
 
     public static void setup() {
-        ScreenEvents.BEFORE_INIT.register((minecraft, screen, sw, sh) -> {
+        MinecraftForge.EVENT_BUS.addListener((ScreenEvent.Init.Post event) -> {
             removeLayout();
-
-            if (isScreenCompatible(screen)) {
+            if (isScreenCompatible(event.getScreen())) {
                 setupLayout();
-
-                ScreenEvents.afterRender(screen).register((s, stack, mouseX, mouseY, tickDelta) -> {
-                    // Fabric API provides the wrong matrixstack (which is translated -2000), behind
-                    // the ortho near plane, so we need to translate it back to the front.
-                    // https://github.com/FabricMC/fabric/pull/3061
-                    stack.pushPose();
-                    stack.translate(0, 0, 2000);
-
-                    renderGuide((AbstractContainerScreen<?>) s, stack, tickDelta, mouseX, mouseY, sw, sh);
-
-                    stack.popPose();
-                });
             }
+        });
+
+        MinecraftForge.EVENT_BUS.addListener((ScreenEvent.Render.Post event) -> {
+            if (!isScreenCompatible(event.getScreen()) || leftLayout == null) {
+                return;
+            }
+            var stack = event.getPoseStack();
+            stack.pushPose();
+            stack.translate(0, 0, 2000);
+            var screen = event.getScreen();
+            renderGuide((AbstractContainerScreen<?>) screen, stack, event.getPartialTick(), event.getMouseX(), event.getMouseY(), screen.width, screen.height);
+            stack.popPose();
         });
 
         ControlifyEvents.INPUT_MODE_CHANGED.register(mode -> {

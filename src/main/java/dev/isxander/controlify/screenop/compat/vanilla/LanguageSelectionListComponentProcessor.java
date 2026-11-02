@@ -5,12 +5,13 @@ import dev.isxander.controlify.screenop.ScreenProcessor;
 import dev.isxander.controlify.screenop.ComponentProcessor;
 import dev.isxander.controlify.mixins.feature.screenop.vanilla.OptionsSubScreenAccessor;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.language.LanguageInfo;
 
 public class LanguageSelectionListComponentProcessor implements ComponentProcessor {
-    private final String code;
+    private final LanguageInfo language;
 
-    public LanguageSelectionListComponentProcessor(String code) {
-        this.code = code;
+    public LanguageSelectionListComponentProcessor(LanguageInfo language) {
+        this.language = language;
     }
 
     @Override
@@ -18,9 +19,9 @@ public class LanguageSelectionListComponentProcessor implements ComponentProcess
         if (controller.bindings().GUI_PRESS.justPressed()) {
             var minecraft = Minecraft.getInstance();
             var languageManager = minecraft.getLanguageManager();
-            if (!code.equals(languageManager.getSelected())) {
-                languageManager.setSelected(code);
-                minecraft.options.languageCode = code;
+            if (!language.equals(languageManager.getSelected())) {
+                languageManager.setSelected(language);
+                minecraft.options.languageCode = language.getCode();
                 minecraft.reloadResourcePacks();
                 minecraft.options.save();
             }

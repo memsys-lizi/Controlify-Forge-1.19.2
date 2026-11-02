@@ -23,10 +23,8 @@ import dev.isxander.controlify.utils.DebugLog;
 import dev.isxander.controlify.utils.ToastUtils;
 import dev.isxander.controlify.virtualmouse.VirtualMouseHandler;
 import dev.isxander.controlify.wireless.LowBatteryNotifier;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
-import net.fabricmc.fabric.api.resource.ResourcePackActivationType;
-import net.fabricmc.loader.api.FabricLoader;
+import dev.isxander.controlify.api.event.ControlifyEvents.ControllersDiscoveredEvent;
+import dev.isxander.controlify.api.event.ControlifyEvents.ControlifyPreInitEvent;
 import net.minecraft.CrashReport;
 import net.minecraft.CrashReportCategory;
 import net.minecraft.ReportedException;
@@ -36,18 +34,22 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import net.minecraftforge.common.MinecraftForge;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 
 import java.util.ArrayDeque;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.ServiceLoader;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
 public class Controlify implements ControlifyApi {
     public static final Logger LOGGER = LogUtils.getLogger();
     private static Controlify instance = null;
+    private static boolean readyToTick = false;
 
     private final Minecraft minecraft = Minecraft.getInstance();
 
@@ -76,6 +78,13 @@ public class Controlify implements ControlifyApi {
         LOGGER.info("Initializing Controlify...");
 
         config().load();
+
+        // Headless and scripted clients have no onboarding click. The Gradle client run sets this.
+        if (Boolean.getBoolean("controlify.loadSdlOnStartup")) {
+            config().globalSettings().vibrationOnboarded = true;
+            config().globalSettings().loadVibrationNatives = true;
+            SDL2NativesManager.initialise();
+        }
 
         var controllersConnected = IntStream.range(0, GLFW.GLFW_JOYSTICK_LAST + 1).anyMatch(GLFW::glfwJoystickPresent);
         if (controllersConnected) {
@@ -175,15 +184,10 @@ public class Controlify implements ControlifyApi {
             config().saveIfDirty();
         }
 
-        ClientTickEvents.START_CLIENT_TICK.register(this::tick);
+        readyToTick = true;
 
-        FabricLoader.getInstance().getEntrypoints("controlify", ControlifyEntrypoint.class).forEach(entrypoint -> {
-            try {
-                entrypoint.onControllersDiscovered(this);
-            } catch (Exception e) {
-                LOGGER.error("Failed to run `onControllersDiscovered` on Controlify entrypoint: " + entrypoint.getClass().getName(), e);
-            }
-        });
+        fireEntrypoints(entrypoint -> entrypoint.onControllersDiscovered(this), "onControllersDiscovered");
+        MinecraftForge.EVENT_BUS.post(new ControllersDiscoveredEvent(this));
     }
 
     public void preInitialiseControlify() {
@@ -191,13 +195,7 @@ public class Controlify implements ControlifyApi {
 
         LOGGER.info("Pre-initializing Controlify...");
 
-        ResourceManagerHelper.registerBuiltinResourcePack(
-                Controlify.id("extra_mappings"),
-                FabricLoader.getInstance().getModContainer("controlify").orElseThrow(),
-                Component.translatable("controlify.resource_pack.extra_mappings"),
-                ResourcePackActivationType.DEFAULT_ENABLED
-        );
-
+        // The extra mappings pack is registered from AddPackFindersEvent during construction.
         ControlifySounds.init();
 
         this.inGameInputHandler = null;
@@ -208,11 +206,20 @@ public class Controlify implements ControlifyApi {
 
         ControllerBindHandler.setup();
 
-        FabricLoader.getInstance().getEntrypoints("controlify", ControlifyEntrypoint.class).forEach(entrypoint -> {
+        fireEntrypoints(entrypoint -> entrypoint.onControlifyPreInit(this), "onControlifyPreInit");
+        MinecraftForge.EVENT_BUS.post(new ControlifyPreInitEvent(this));
+    }
+
+    public static boolean isReadyToTick() {
+        return readyToTick;
+    }
+
+    private void fireEntrypoints(Consumer<ControlifyEntrypoint> action, String name) {
+        ServiceLoader.load(ControlifyEntrypoint.class, ControlifyEntrypoint.class.getClassLoader()).forEach(entrypoint -> {
             try {
-                entrypoint.onControlifyPreInit(this);
+                action.accept(entrypoint);
             } catch (Exception e) {
-                LOGGER.error("Failed to run `onControlifyPreInit` on Controlify entrypoint: " + entrypoint.getClass().getName(), e);
+                LOGGER.error("Failed to run `{}` on Controlify entrypoint: {}", name, entrypoint.getClass().getName(), e);
             }
         });
     }

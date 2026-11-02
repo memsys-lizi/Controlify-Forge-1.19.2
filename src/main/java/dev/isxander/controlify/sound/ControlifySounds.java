@@ -1,20 +1,28 @@
 package dev.isxander.controlify.sound;
 
-import dev.isxander.controlify.Controlify;
-import net.minecraft.core.Registry;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
+import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.registries.DeferredRegister;
+import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.RegistryObject;
 
 public final class ControlifySounds {
-    public static final SoundEvent SCREEN_FOCUS_CHANGE = register("controlify.ui.focus");
+    public static final DeferredRegister<SoundEvent> SOUND_EVENTS = DeferredRegister.create(ForgeRegistries.SOUND_EVENTS, "controlify");
 
-    private static SoundEvent register(String id) {
-        ResourceLocation location = Controlify.id(id);
-        return Registry.register(BuiltInRegistries.SOUND_EVENT, location, SoundEvent.createVariableRangeEvent(location));
+    public static final RegistryObject<SoundEvent> SCREEN_FOCUS_CHANGE = SOUND_EVENTS.register(
+            "controlify.ui.focus",
+            () -> new SoundEvent(new ResourceLocation("controlify", "controlify.ui.focus"))
+    );
+
+    private ControlifySounds() {
+    }
+
+    public static void register(IEventBus modBus) {
+        SOUND_EVENTS.register(modBus);
     }
 
     public static void init() {
-        // calling init now calls <clinit> which is where the sounds are registered
+        // Registry entries are created by DeferredRegister during mod construction.
     }
 }

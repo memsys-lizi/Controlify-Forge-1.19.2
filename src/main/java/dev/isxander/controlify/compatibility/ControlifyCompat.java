@@ -1,24 +1,21 @@
 package dev.isxander.controlify.compatibility;
 
-import dev.isxander.controlify.compatibility.immediatelyfast.ImmediatelyFastCompat;
-import net.fabricmc.loader.api.FabricLoader;
+import net.minecraftforge.fml.ModList;
 
 public class ControlifyCompat {
-    public static final boolean IMMEDIATELY_FAST = mod("immediatelyfast");
+    /**
+     * ImmediatelyFast has no Forge 1.19.2 build that this port compiles against.
+     * HUD batching is a no-op until a compatible build exists.
+     */
+    public static final boolean IMMEDIATELY_FAST = false;
 
     public static void ifBeginHudBatching() {
-        if (IMMEDIATELY_FAST) {
-            ImmediatelyFastCompat.beginHudBatching();
-        }
     }
 
     public static void ifEndHudBatching() {
-        if (IMMEDIATELY_FAST) {
-            ImmediatelyFastCompat.endHudBatching();
-        }
     }
 
-    private static boolean mod(String id) {
-        return FabricLoader.getInstance().isModLoaded(id);
+    public static boolean isModLoaded(String id) {
+        return ModList.get().isLoaded(id);
     }
 }

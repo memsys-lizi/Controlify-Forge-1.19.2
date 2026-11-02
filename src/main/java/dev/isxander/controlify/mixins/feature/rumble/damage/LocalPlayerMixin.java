@@ -8,6 +8,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.player.ProfilePublicKey;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -19,8 +20,8 @@ public abstract class LocalPlayerMixin extends AbstractClientPlayer {
     @Unique private float lastHealth = getHealth();
     @Unique private boolean skipTick = true;
 
-    public LocalPlayerMixin(ClientLevel world, GameProfile profile) {
-        super(world, profile);
+    public LocalPlayerMixin(ClientLevel world, GameProfile profile, ProfilePublicKey key) {
+        super(world, profile, key);
     }
 
     @Inject(method = "tick", at = @At("HEAD"))

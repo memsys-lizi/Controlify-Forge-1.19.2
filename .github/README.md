@@ -1,3 +1,5 @@
+> **Unofficial Forge port.** This branch (`forge-1.19.2`) ports Controlify 1.2.1 from Fabric 1.19.4 to Minecraft 1.19.2 / Forge 43.5.2. It is not published or supported by isXander. The original copyright is retained and the license is still LGPL-3.0-or-later. See [PORTING.md](../PORTING.md) for what changed, which mixins are disabled, and what is left for later phases. The in-game name is **Controlify (Unofficial Forge 1.19.2 Port)**.
+
 <div align="center">
 
 ![banner](https://raw.githubusercontent.com/isXander/Controlify/1.19.x/dev/assets/controlify-banner.png)
@@ -102,8 +104,7 @@ A few features in various points in the horizon are:
 
 ## Backports?
 
-This mod is only and will only be available for **1.19.4** and above, this is because in 1.19.4, Mojang
-introduced arrow key navigation which was easily ported to controller, below 1.19.4, this is not possible.
+Upstream Controlify targets **1.19.4** and above, because that version added arrow-key GUI navigation that the controller UI builds on. This unofficial branch is a Forge 1.19.2 port of tag `1.2.1+1.19.4`. GUI navigation that depended on 1.19.4 widgets is disabled here; see [PORTING.md](../PORTING.md).
 
 ## License
 

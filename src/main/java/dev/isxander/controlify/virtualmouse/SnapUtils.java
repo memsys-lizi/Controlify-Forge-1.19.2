@@ -16,15 +16,15 @@ public final class SnapUtils {
         if (recipeBookComponent.isVisible()) {
             RecipeBookComponentAccessor componentAccessor = (RecipeBookComponentAccessor) recipeBookComponent;
             componentAccessor.getTabButtons().forEach(button -> {
-                int x = button.getX() + button.getWidth() / 2;
-                int y = button.getY() + button.getHeight() / 2;
+                int x = button.x + button.getWidth() / 2;
+                int y = button.y + button.getHeight() / 2;
                 points.add(new SnapPoint(new Vector2i(x, y), 20));
             });
 
             RecipeBookPageAccessor pageAccessor = (RecipeBookPageAccessor) componentAccessor.getRecipeBookPage();
             pageAccessor.getButtons().forEach(button -> {
-                int x = button.getX() + button.getWidth() / 2;
-                int y = button.getY() + button.getHeight() / 2;
+                int x = button.x + button.getWidth() / 2;
+                int y = button.y + button.getHeight() / 2;
                 points.add(new SnapPoint(new Vector2i(x, y), 21));
             });
         }

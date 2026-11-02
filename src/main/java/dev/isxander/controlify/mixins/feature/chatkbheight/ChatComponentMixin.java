@@ -1,6 +1,5 @@
 package dev.isxander.controlify.mixins.feature.chatkbheight;
 
-import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.mojang.blaze3d.vertex.PoseStack;
 import dev.isxander.controlify.Controlify;
 import dev.isxander.controlify.controller.Controller;
@@ -18,7 +17,7 @@ public class ChatComponentMixin {
     @Shadow @Final private Minecraft minecraft;
 
     @Inject(method = "render", at = @At("HEAD"))
-    private void translateRender(PoseStack matrices, int tickDelta, int i, int j, CallbackInfo ci) {
+    private void translateRender(PoseStack matrices, int tickDelta, CallbackInfo ci) {
         if (!(minecraft.screen instanceof ChatScreen))
             return;
 
@@ -29,14 +28,16 @@ public class ChatComponentMixin {
     }
 
     @Inject(method = "render", at = @At("TAIL"))
-    private void finishTranslateRender(PoseStack matrices, int tickDelta, int i, int j, CallbackInfo ci) {
+    private void finishTranslateRender(PoseStack matrices, int tickDelta, CallbackInfo ci) {
         if (!(minecraft.screen instanceof ChatScreen))
             return;
 
         matrices.popPose();
     }
 
-    @ModifyConstant(method = "render", constant = @Constant(intValue = 40))
+    // 1.19.4 render() uses a 40px bottom inset while chat is open. 1.19.2 does not,
+    // so this modifier is optional and does nothing on this version.
+    @ModifyConstant(method = "render", constant = @Constant(intValue = 40), require = 0)
     private int modifyChatOffset(int original) {
         if (!(minecraft.screen instanceof ChatScreen))
             return original;

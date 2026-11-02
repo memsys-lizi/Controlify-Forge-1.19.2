@@ -6,7 +6,7 @@ import dev.isxander.controlify.ControllerManager;
 import dev.isxander.controlify.controller.Controller;
 import dev.isxander.controlify.controller.joystick.CompoundJoystickInfo;
 import dev.isxander.controlify.utils.DebugLog;
-import net.fabricmc.loader.api.FabricLoader;
+import net.minecraftforge.fml.loading.FMLPaths;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
@@ -19,7 +19,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class ControlifyConfig {
-    public static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("controlify.json");
+    public static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("controlify.json");
 
     private static final Gson GSON = new GsonBuilder()
             .serializeNulls()
@@ -121,12 +121,12 @@ public class ControlifyConfig {
         }
 
         if (object.has("compound_joysticks")) {
-            this.compoundJoysticks = object
-                    .getAsJsonArray("compound_joysticks")
-                    .asList()
-                    .stream()
-                    .map(element -> GSON.fromJson(element, CompoundJoystickInfo.class))
-                    .collect(Collectors.toMap(info -> info.type().mappingId(), Function.identity()));
+            Map<String, CompoundJoystickInfo> joysticks = new HashMap<>();
+            for (JsonElement element : object.getAsJsonArray("compound_joysticks")) {
+                CompoundJoystickInfo info = GSON.fromJson(element, CompoundJoystickInfo.class);
+                joysticks.put(info.type().mappingId(), info);
+            }
+            this.compoundJoysticks = joysticks;
         } else {
             this.compoundJoysticks = Map.of();
         }

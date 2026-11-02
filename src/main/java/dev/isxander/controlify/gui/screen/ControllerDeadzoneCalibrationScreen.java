@@ -34,15 +34,12 @@ public class ControllerDeadzoneCalibrationScreen extends Screen {
     @Override
     protected void init() {
         addRenderableWidget(
-                readyButton = Button.builder(Component.translatable("controlify.calibration.ready"), btn -> {
-                            if (!calibrated)
-                                startCalibration();
-                            else
-                                onClose();
-                        })
-                        .width(150)
-                        .pos(this.width / 2 - 75, this.height - 8 - 20)
-                        .build());
+                readyButton = new Button(this.width / 2 - 75, this.height - 8 - 20, 150, 20, Component.translatable("controlify.calibration.ready"), btn -> {
+                    if (!calibrated)
+                        startCalibration();
+                    else
+                        onClose();
+                }));
 
         this.infoLabel = MultiLineLabel.create(font, Component.translatable("controlify.calibration.info"), width - 30);
         this.waitLabel = MultiLineLabel.create(font, Component.translatable("controlify.calibration.wait"), width - 30);

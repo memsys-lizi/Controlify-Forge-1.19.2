@@ -10,9 +10,9 @@ import dev.isxander.controlify.controller.Controller;
 import dev.isxander.controlify.controller.ControllerState;
 import dev.isxander.controlify.api.event.ControlifyEvents;
 import dev.isxander.controlify.controller.gamepad.GamepadController;
-import dev.isxander.controlify.mixins.compat.fapi.KeyBindingRegistryImplAccessor;
 import dev.isxander.controlify.mixins.feature.bind.KeyMappingAccessor;
 import dev.isxander.controlify.mixins.feature.bind.ToggleKeyMappingAccessor;
+import dev.isxander.controlify.platform.ControlifyKeys;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -477,8 +477,16 @@ public class ControllerBindings<T extends ControllerState> {
     }
 
     private void registerModdedKeybinds() {
-        for (KeyMapping keyMapping : KeyBindingRegistryImplAccessor.getCustomKeys()) {
-            if (EXCLUDED_VANILLA_BINDS.contains(keyMapping))
+        Set<KeyMapping> skip = new HashSet<>(EXCLUDED_VANILLA_BINDS);
+        skip.addAll(vanillaKeyMappings());
+        for (var binding : registry.values()) {
+            if (binding.override() != null) {
+                skip.add(binding.override().keyMapping());
+            }
+        }
+
+        for (KeyMapping keyMapping : KeyMappingAccessor.controlify$getAll().values()) {
+            if (skip.contains(keyMapping))
                 continue;
 
             try {
@@ -486,8 +494,10 @@ public class ControllerBindings<T extends ControllerState> {
                         .toLowerCase()
                         .replaceAll("[^a-z0-9/._-]", "_")
                         .trim();
+                if (idPath.isEmpty())
+                    continue;
 
-                var identifier = new ResourceLocation("fabric-key-binding-api-v1", idPath);
+                var identifier = new ResourceLocation("controlify", "key." + idPath);
                 BooleanSupplier toggleOverride = () -> false;
                 if (keyMapping instanceof ToggleKeyMapping toggleKeyMapping) {
                     toggleOverride = ((ToggleKeyMappingAccessor) toggleKeyMapping).getNeedsToggle();
@@ -509,6 +519,22 @@ public class ControllerBindings<T extends ControllerState> {
         }
     }
 
+    private static Set<KeyMapping> vanillaKeyMappings() {
+        var options = Minecraft.getInstance().options;
+        Set<KeyMapping> keys = new HashSet<>();
+        Collections.addAll(keys,
+                options.keyUp, options.keyLeft, options.keyDown, options.keyRight,
+                options.keyJump, options.keyShift, options.keySprint, options.keyInventory,
+                options.keySwapOffhand, options.keyDrop, options.keyUse, options.keyAttack,
+                options.keyPickItem, options.keyChat, options.keyPlayerList, options.keyCommand,
+                options.keySocialInteractions, options.keyScreenshot, options.keyTogglePerspective,
+                options.keySmoothCamera, options.keyFullscreen, options.keySpectatorOutlines,
+                options.keyAdvancements, options.keySaveHotbarActivator, options.keyLoadHotbarActivator
+        );
+        Collections.addAll(keys, options.keyHotbarSlots);
+        return keys;
+    }
+
     private void imitateVanillaClick() {
         ControllerBindingImpl.clearPressedBinds(controller);
 
@@ -520,9 +546,10 @@ public class ControllerBindings<T extends ControllerState> {
         for (var binding : registry().values()) {
             var override = binding.override();
             if (override == null) continue;
+            if (!ControlifyKeys.isKeyActive(override.keyMapping())) continue;
 
             var accessor = (KeyMappingAccessor) override.keyMapping();
-            var vanillaKeyCode = accessor.getKey();
+            var vanillaKeyCode = override.keyMapping().getKey();
 
             if (override.toggleable().getAsBoolean()) {
                 if (binding.justPressed()) {

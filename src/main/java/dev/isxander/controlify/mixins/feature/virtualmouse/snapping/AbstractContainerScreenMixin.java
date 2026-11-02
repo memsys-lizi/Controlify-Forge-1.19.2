@@ -26,6 +26,7 @@ public abstract class AbstractContainerScreenMixin<T extends AbstractContainerMe
 
     @Shadow protected int topPos;
 
+    @Shadow protected int imageWidth;
     @Shadow protected int imageHeight;
 
     @Override

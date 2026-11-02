@@ -2,8 +2,8 @@ package dev.isxander.controlify.controller.sdl2;
 
 import dev.isxander.controlify.Controlify;
 import dev.isxander.controlify.utils.DebugLog;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.Util;
+import net.minecraftforge.fml.loading.FMLPaths;
 import org.libsdl.SDL;
 
 import java.io.File;
@@ -20,7 +20,7 @@ import java.util.Map;
 import static org.libsdl.SDL_Hints.*;
 
 public class SDL2NativesManager {
-    private static final String SDL2_VERSION = "<SDL2_VERSION>";
+    private static final String SDL2_VERSION = "2.26.5-18";
     private static final Map<Target, String> NATIVE_LIBRARIES = Map.of(
             new Target(Util.OS.WINDOWS, true, false), "windows64.dll",
             new Target(Util.OS.WINDOWS, false, false), "window32.dll",
@@ -142,7 +142,7 @@ public class SDL2NativesManager {
         }
 
         public Path getLocalNativePath() {
-            return FabricLoader.getInstance().getGameDir()
+            return FMLPaths.GAMEDIR.get()
                     .resolve("controlify-natives")
                     .resolve(getArtifactName());
         }

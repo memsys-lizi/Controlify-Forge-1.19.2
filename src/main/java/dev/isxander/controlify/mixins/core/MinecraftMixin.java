@@ -25,9 +25,16 @@ public abstract class MinecraftMixin {
     @Shadow public abstract ToastComponent getToasts();
 
     @Unique private boolean initNextTick = false;
+    @Unique private boolean controlify$preInited = false;
 
     @ModifyExpressionValue(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/packs/resources/ReloadableResourceManager;createReload(Ljava/util/concurrent/Executor;Ljava/util/concurrent/Executor;Ljava/util/concurrent/CompletableFuture;Ljava/util/List;)Lnet/minecraft/server/packs/resources/ReloadInstance;"))
     private ReloadInstance onInputInitialized(ReloadInstance resourceReload) {
+        // Fabric called pre-init from the client entrypoint, which runs during Minecraft construction
+        // after instance = this. FMLClientSetupEvent is too early for Minecraft.getInstance().
+        if (!controlify$preInited) {
+            controlify$preInited = true;
+            Controlify.instance().preInitialiseControlify();
+        }
         // Controllers need to be initialized extremely late due to the data-driven nature of controllers.
         // We need to bypass thenRun because any runnable is ran inside of a `minecraft.execute()`, which suppresses exceptions
         resourceReload.done().thenRun(() -> initNextTick = true);
@@ -53,7 +60,7 @@ public abstract class MinecraftMixin {
             setScreen(new BetaNoticeScreen());
     }
 
-    @Inject(method = "close", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/telemetry/ClientTelemetryManager;close()V"))
+    @Inject(method = "close", at = @At("HEAD"))
     private void onMinecraftClose(CallbackInfo ci) {
         ControllerManager.getConnectedControllers().forEach(Controller::close);
     }

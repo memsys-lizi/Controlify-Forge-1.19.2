@@ -1,7 +1,7 @@
 package dev.isxander.controlify.debug;
 
 import dev.isxander.controlify.Controlify;
-import net.fabricmc.loader.api.FabricLoader;
+import net.minecraftforge.fml.loading.FMLEnvironment;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,7 +40,7 @@ public class DebugProperties {
     }
 
     private static boolean boolProp(String name, boolean defProd, boolean defDev) {
-        boolean def = FabricLoader.getInstance().isDevelopmentEnvironment() ? defDev : defProd;
+        boolean def = FMLEnvironment.production ? defProd : defDev;
         boolean enabled = Boolean.parseBoolean(System.getProperty(name, Boolean.toString(def)));
         properties.add(new DebugProperty(name, enabled, def));
         return enabled;

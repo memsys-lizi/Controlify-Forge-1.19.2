@@ -1,0 +1,250 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+}
+
+version = '1.2.1+1.19.2-forge'
+group = 'dev.isxander'
+base {
+    archivesName = 'controlify'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+println "Java: ${System.getProperty('java.version')}, JVM: ${System.getProperty('java.vm.version')} (${System.getProperty('java.vendor')}), Arch: ${System.getProperty('os.arch')}"
+
+// Must be enabled before the minecraft {} block. Embeds libraries with Forge's Jar-in-Jar.
+jarJar.enable()
+
+minecraft {
+    mappings channel: 'official', version: '1.19.2'
+
+    copyIdeResources = true
+
+    accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
+
+    runs {
+        client {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
+            property 'controlify.loadSdlOnStartup', 'true'
+
+            mods {
+                controlify {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        server {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
+
+            mods {
+                controlify {
+                    source sourceSets.main
+                }
+            }
+        }
+    }
+}
+
+sourceSets.main.resources {
+    srcDir 'src/generated/resources'
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://jitpack.io' }
+    maven { url = 'https://maven.isxander.dev/releases' }
+    maven { url = 'https://maven.quiltmc.org/repository/release' }
+    maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
+}
+
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.19.2-43.5.2'
+
+    // MixinExtras annotations for compilation. The Forge artifact is a Jar-in-Jar mod that
+    // embeds the common jar and bootstraps MixinExtras on load. implementation keeps the
+    // classes on the dev runtime classpath as well.
+    implementation 'com.github.llamalad7.mixinextras:mixinextras-common:0.2.0-beta.8'
+    annotationProcessor 'com.github.llamalad7.mixinextras:mixinextras-common:0.2.0-beta.8'
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    jarJar(group: 'com.github.llamalad7.mixinextras', name: 'mixinextras-forge', version: '0.2.0-beta.8') {
+        jarJar.ranged(it, '[0.2.0-beta.8,0.3.0)')
+    }
+
+    // Controller connection identification. JNA is hid4java's native backend and must ship with it.
+    jarJar(group: 'org.hid4java', name: 'hid4java', version: '0.7.0') {
+        jarJar.ranged(it, '[0.7,0.8)')
+    }
+    jarJar(group: 'net.java.dev.jna', name: 'jna', version: '5.6.0') {
+        jarJar.ranged(it, '[5.6,6.0)')
+    }
+
+    // Controller rumble. SDL2 natives are downloaded at runtime by SDL2NativesManager.
+    jarJar(group: 'dev.isxander', name: 'sdl2-jni', version: '2.26.5-18') {
+        jarJar.ranged(it, '[2.26.5-18,2.27)')
+    }
+
+    // hiddb.json5 parsing. annotations is a compile dependency of quilt-json5.
+    jarJar(group: 'org.quiltmc', name: 'quilt-json5', version: '1.0.3') {
+        jarJar.ranged(it, '[1.0.3,1.1)')
+    }
+    jarJar(group: 'org.jetbrains', name: 'annotations', version: '20.1.0') {
+        jarJar.ranged(it, '[20.1.0,25)')
+    }
+
+    // 1.19.2 does not bundle JOML. The 1.19.4 sources use it for GUI layout and the virtual cursor.
+    implementation 'org.joml:joml:1.10.5'
+    jarJar(group: 'org.joml', name: 'joml', version: '1.10.5') {
+        jarJar.ranged(it, '[1.10.5,1.11)')
+    }
+
+    implementation 'org.hid4java:hid4java:0.7.0'
+    implementation 'net.java.dev.jna:jna:5.6.0'
+    implementation 'dev.isxander:sdl2-jni:2.26.5-18'
+    implementation 'org.quiltmc:quilt-json5:1.0.3'
+    implementation 'org.jetbrains:annotations:20.1.0'
+}
+
+// Userdev does not load jar-in-jar mods. MixinExtras is a real mod (mods.toml), so the
+// Gradle client/server runs need the forge artifact in the game mods folder. The production
+// jar still embeds it via jarJar above.
+configurations.create('mixinExtrasForge')
+dependencies.add('mixinExtrasForge', 'com.github.llamalad7.mixinextras:mixinextras-forge:0.2.0-beta.8')
+def copyDevMods = tasks.register('copyDevMods', Copy) {
+    from configurations.mixinExtrasForge
+    into layout.projectDirectory.dir('run/mods')
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+// BootstrapLauncher builds the game module layer from minecraft_classpath, not the Gradle -cp.
+// JOML, SDL, hid4java and json5 must be in that collection or mixins cannot resolve them.
+// The classpath file is written during the run task action, so appending it in doFirst is wiped.
+// Forge already modules JNA 5.12 and JetBrains annotations 23; do not add the older copies.
+configurations.create('devGameModules') {
+    transitive = false
+}
+dependencies.add('devGameModules', 'org.joml:joml:1.10.5')
+dependencies.add('devGameModules', 'org.hid4java:hid4java:0.7.0')
+dependencies.add('devGameModules', 'dev.isxander:sdl2-jni:2.26.5-18')
+dependencies.add('devGameModules', 'org.quiltmc:quilt-json5:1.0.3')
+
+tasks.matching { it.name == 'runClient' || it.name == 'runServer' }.configureEach { task ->
+    task.dependsOn copyDevMods
+    task.minecraftArtifacts.from(configurations.devGameModules)
+}
+
+def mcpToSrg = layout.buildDirectory.file('createMcpToSrg/output.tsrg')
+def refmapFile = layout.buildDirectory.file('tmp/compileJava/controlify.refmap.json')
+def outTsrg = layout.buildDirectory.file('tmp/compileJava/out.tsrg')
+
+tasks.withType(JavaCompile).configureEach {
+    dependsOn 'createMcpToSrg'
+    options.encoding = 'UTF-8'
+    options.release.set(17)
+    // Mixin 0.8.5 FG3 service: official names in source, SRG names in the production refmap.
+    options.compilerArgs += [
+            '-AmappingTypes=tsrg',
+            "-AreobfTsrgFile=${mcpToSrg.get().asFile.absolutePath}",
+            "-AoutTsrgFile=${outTsrg.get().asFile.absolutePath}",
+            "-AoutRefMapFile=${refmapFile.get().asFile.absolutePath}",
+    ]
+    doFirst {
+        refmapFile.get().asFile.parentFile.mkdirs()
+    }
+}
+
+// Do not compile the Fabric testmod source set.
+sourceSets.main.java.setSrcDirs(['src/main/java'])
+
+tasks.named('processResources', ProcessResources).configure {
+    var replaceProperties = [
+            minecraft_version      : '1.19.2',
+            minecraft_version_range: '[1.19.2,1.19.3)',
+            forge_version          : '43.5.2',
+            forge_version_range    : '[43.5.2,44)',
+            loader_version_range   : '[43,)',
+            mod_id                 : 'controlify',
+            mod_name               : 'Controlify (Unofficial Forge 1.19.2 Port)',
+            mod_license            : 'LGPL-3.0-or-later',
+            mod_version            : project.version.toString(),
+            mod_authors            : 'isXander',
+            mod_description        : project.findProperty('modDescription')?.toString() ?: ''
+    ]
+    inputs.properties replaceProperties
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand replaceProperties
+    }
+}
+
+def refmapCopy = tasks.register('copyMixinRefmap', Copy) {
+    dependsOn 'compileJava', 'processResources'
+    from(refmapFile)
+    into layout.buildDirectory.dir('resources/main')
+}
+
+tasks.named('classes').configure {
+    dependsOn refmapCopy
+}
+
+tasks.named('jar', Jar).configure {
+    dependsOn refmapCopy
+    // copyMixinRefmap already places controlify.refmap.json in the resources output,
+    // which this jar packages. Adding the file again is a duplicate entry.
+    // Fabric metadata still points at removed entrypoints. This build is Forge-only.
+    exclude 'fabric.mod.json'
+    manifest {
+        attributes([
+                'Specification-Title'     : 'controlify',
+                'Specification-Vendor'    : 'isXander',
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : project.version,
+                'Implementation-Vendor'   : 'isXander',
+                'MixinConfigs'            : 'controlify.mixins.json'
+        ])
+    }
+    finalizedBy 'reobfJar'
+}
+
+// @Shadow members are renamed via the Mixin AP's out.tsrg. Refmap entries only cover
+// annotation strings (@Inject / @At / @Accessor). Without this, the production jar keeps
+// official shadow names and fails to apply against SRG Minecraft.
+// reobfJar is created after the Minecraft dependency is resolved, so this cannot run
+// during the initial build script evaluation.
+afterEvaluate {
+    tasks.named('jarJar', Jar).configure {
+        exclude 'fabric.mod.json'
+    }
+    // jarJar writes the dependency-bearing artifact (classifier "all"). reobfJar only
+    // rewrites the thin jar, which cannot load hid4java / SDL / MixinExtras on its own.
+    ['reobfJar', 'reobfJarJar'].each { taskName ->
+        tasks.named(taskName, net.minecraftforge.gradle.userdev.tasks.RenameJarInPlace).configure {
+            extraMappings.from(outTsrg)
+        }
+    }
+    tasks.named('build').configure {
+        dependsOn 'reobfJarJar'
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs += ['-Xlint:-processing', '-Xlint:-removal']
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifact jar
+        }
+    }
+}

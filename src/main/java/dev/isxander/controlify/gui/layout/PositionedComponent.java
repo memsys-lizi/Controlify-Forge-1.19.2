@@ -2,10 +2,10 @@ package dev.isxander.controlify.gui.layout;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.Renderable;
+import net.minecraft.client.gui.components.Widget;
 import org.joml.Vector2ic;
 
-public class PositionedComponent<T extends RenderComponent> implements Renderable {
+public class PositionedComponent<T extends RenderComponent> implements Widget {
     private final T component;
 
     private int x, y;

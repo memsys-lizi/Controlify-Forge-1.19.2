@@ -16,7 +16,7 @@ import dev.isxander.controlify.mixins.feature.screenop.ScreenAccessor;
 import dev.isxander.controlify.screenop.ScreenProcessor;
 import dev.isxander.controlify.virtualmouse.VirtualMouseBehaviour;
 import dev.isxander.controlify.virtualmouse.VirtualMouseHandler;
-import net.minecraft.client.gui.components.Renderable;
+import net.minecraft.client.gui.components.Widget;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.inventory.ClickType;
@@ -195,7 +195,7 @@ public class AbstractContainerScreenProcessor<T extends AbstractContainerScreen<
     }
 
     private void setRenderGuide(boolean render) {
-        List<Renderable> renderables = ((ScreenAccessor) screen).getRenderables();
+        List<Widget> renderables = ((ScreenAccessor) screen).getRenderables();
 
         if (leftLayout == null || rightLayout == null)
             return;

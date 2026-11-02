@@ -1,7 +1,7 @@
 package dev.isxander.controlify.reacharound;
 
 import dev.isxander.controlify.Controlify;
-import dev.isxander.yacl.api.NameableEnum;
+import dev.isxander.controlify.utils.NameableEnum;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
@@ -9,7 +9,7 @@ import java.util.function.BiFunction;
 
 public enum ReachAroundMode implements NameableEnum {
     OFF((minecraft, controlify) -> false),
-    SINGLEPLAYER_ONLY((minecraft, controlify) -> minecraft.isSingleplayer()),
+    SINGLEPLAYER_ONLY((minecraft, controlify) -> minecraft.hasSingleplayerServer()),
     SINGLEPLAYER_AND_LAN((minecraft, controlify) -> minecraft.isLocalServer()),
     EVERYWHERE((minecraft, controlify) -> true);
 

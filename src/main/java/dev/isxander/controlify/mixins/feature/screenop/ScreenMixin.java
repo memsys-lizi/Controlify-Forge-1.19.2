@@ -2,7 +2,6 @@ package dev.isxander.controlify.mixins.feature.screenop;
 
 import dev.isxander.controlify.screenop.ScreenProcessorProvider;
 import dev.isxander.controlify.screenop.ScreenProcessor;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -20,12 +19,8 @@ public class ScreenMixin implements ScreenProcessorProvider {
         return controlify$processor;
     }
 
-    @Inject(method = "init(Lnet/minecraft/client/Minecraft;II)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/screens/Screen;init()V", shift = At.Shift.AFTER))
-    private void onScreenInitialInit(Minecraft client, int width, int height, CallbackInfo ci) {
-        // cannot use screenProcessor() because it may be overriden by registry
-        ScreenProcessorProvider.provide((Screen) (Object) this).onWidgetRebuild();
-    }
-
+    // 1.19.2's Screen.init(Minecraft, int, int) calls rebuildWidgets(), which calls init().
+    // The RETURN inject below covers both the initial open and later rebuilds.
     @Inject(method = "rebuildWidgets", at = @At("RETURN"))
     private void onScreenInit(CallbackInfo ci) {
         // cannot use screenProcessor() because it may be overriden by registry

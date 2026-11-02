@@ -11,6 +11,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -22,13 +23,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class MultiPlayerGameModeMixin {
     @Unique private ContinuousRumbleEffect blockBreakRumble = null;
 
-    @Inject(method = "method_41930", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/ClientLevel;destroyBlockProgress(ILnet/minecraft/core/BlockPos;I)V"))
-    private void onStartBreakingBlock(BlockState state, BlockPos pos, Direction direction, int i, CallbackInfoReturnable<Packet<?>> cir) {
+    @Inject(method = "lambda$startDestroyBlock$1(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraftforge/event/entity/player/PlayerInteractEvent$LeftClickBlock;Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/Direction;I)Lnet/minecraft/network/protocol/Packet;", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/ClientLevel;destroyBlockProgress(ILnet/minecraft/core/BlockPos;I)V"))
+    private void onStartBreakingBlock(BlockState state, PlayerInteractEvent.LeftClickBlock click, BlockPos pos, Direction direction, int sequence, CallbackInfoReturnable<Packet<?>> cir) {
         startRumble(state);
     }
 
-    @Inject(method = "method_41930", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/MultiPlayerGameMode;destroyBlock(Lnet/minecraft/core/BlockPos;)Z"))
-    private void onInstabreakBlockSurvival(BlockState state, BlockPos pos, Direction direction, int i, CallbackInfoReturnable<Packet> cir) {
+    @Inject(method = "lambda$startDestroyBlock$1(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraftforge/event/entity/player/PlayerInteractEvent$LeftClickBlock;Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/Direction;I)Lnet/minecraft/network/protocol/Packet;", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/MultiPlayerGameMode;destroyBlock(Lnet/minecraft/core/BlockPos;)Z"))
+    private void onInstabreakBlockSurvival(BlockState state, PlayerInteractEvent.LeftClickBlock click, BlockPos pos, Direction direction, int sequence, CallbackInfoReturnable<Packet<?>> cir) {
         startRumble(state);
         // won't stop until 1 tick
         stopRumble();

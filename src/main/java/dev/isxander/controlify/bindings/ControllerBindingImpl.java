@@ -7,16 +7,10 @@ import dev.isxander.controlify.Controlify;
 import dev.isxander.controlify.api.bind.BindRenderer;
 import dev.isxander.controlify.api.bind.ControllerBinding;
 import dev.isxander.controlify.api.bind.ControllerBindingBuilder;
-import dev.isxander.controlify.config.gui.GamepadBindController;
-import dev.isxander.controlify.config.gui.JoystickBindController;
 import dev.isxander.controlify.controller.Controller;
 import dev.isxander.controlify.controller.ControllerState;
 import dev.isxander.controlify.controller.gamepad.GamepadController;
-import dev.isxander.controlify.controller.gamepad.GamepadState;
-import dev.isxander.controlify.controller.joystick.JoystickController;
-import dev.isxander.controlify.controller.joystick.JoystickState;
 import dev.isxander.controlify.gui.DrawSize;
-import dev.isxander.yacl.api.Option;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
@@ -164,22 +158,6 @@ public class ControllerBindingImpl<T extends ControllerState> implements Control
     @Override
     public BindRenderer renderer() {
         return renderer;
-    }
-
-    @Override
-    public Option.Builder<?> startYACLOption() {
-        Option.Builder<IBind<T>> option = Option.createBuilder((Class<IBind<T>>) (Class<?>) IBind.class)
-                .name(name())
-                .binding(defaultBind(), this::currentBind, this::setCurrentBind)
-                .tooltip(this.description());
-
-        if (controller instanceof GamepadController gamepad) {
-            ((Option.Builder<IBind<GamepadState>>) (Object) option).controller(opt -> new GamepadBindController(opt, gamepad));
-        } else if (controller instanceof JoystickController<?> joystick) {
-            ((Option.Builder<IBind<JoystickState>>) (Object) option).controller(opt -> new JoystickBindController(opt, joystick));
-        }
-
-        return option;
     }
 
     // FIXME: very hack solution please remove me
