@@ -6,14 +6,8 @@ import dev.isxander.controlify.api.ingameinput.LookInputModifier;
 import dev.isxander.controlify.controller.Controller;
 import dev.isxander.controlify.api.event.ControlifyEvents;
 import dev.isxander.controlify.controller.gamepad.GamepadController;
-import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.player.KeyboardInput;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
-import net.minecraft.world.InteractionHand;
 
 import java.util.function.BiFunction;
 
@@ -28,13 +22,21 @@ public class InGameInputHandler {
         this.controller = controller;
         this.minecraft = Minecraft.getInstance();
 
-        ControlifyEvents.INPUT_MODE_CHANGED.register(mode -> {
-            if (minecraft.player != null) {
-                minecraft.player.input = mode == InputMode.CONTROLLER
-                        ? new ControllerPlayerMovement(controller, minecraft.player)
-                        : new KeyboardInput(minecraft.options);
-            }
-        });
+    }
+
+    /**
+     * Install or remove controller movement on the local player.
+     * Called when this handler becomes current and whenever the input mode changes.
+     * A listener is not registered here: each new handler used to stack one, and the
+     * stale handler could put the previous controller back in charge.
+     */
+    public void applyToPlayer(InputMode mode) {
+        if (minecraft.player == null) {
+            return;
+        }
+        minecraft.player.input = mode == InputMode.CONTROLLER
+                ? new ControllerPlayerMovement(controller, minecraft.player)
+                : new KeyboardInput(minecraft.options);
     }
 
     public void inputTick() {
@@ -52,50 +54,13 @@ public class InGameInputHandler {
             minecraft.pauseGame(false);
         }
         if (minecraft.player != null) {
+            // Attack, use, drop, swap hands, inventory and perspective are vanilla KeyMappings.
+            // imitateVanillaClick presses that one mapping so handleKeybinds performs the action.
             if (controller.bindings().NEXT_SLOT.justPressed()) {
-                minecraft.player.getInventory().swapPaint(-1);
+                cycleHotbar(-1);
             }
             if (controller.bindings().PREV_SLOT.justPressed()) {
-                minecraft.player.getInventory().swapPaint(1);
-            }
-
-            if (!minecraft.player.isSpectator()) {
-                if (controller.bindings().DROP.justPressed()) {
-                    minecraft.player.drop(false);
-                    minecraft.player.swing(InteractionHand.MAIN_HAND);
-                }
-
-                if (controller.bindings().SWAP_HANDS.justPressed()) {
-                    minecraft.player.connection.send(new ServerboundPlayerActionPacket(ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ZERO, Direction.DOWN));
-                }
-            }
-
-            if (controller.bindings().INVENTORY.justPressed()) {
-                if (minecraft.gameMode.isServerControlledInventory()) {
-                    minecraft.player.sendOpenInventory();
-                } else {
-                    minecraft.getTutorial().onOpenInventory();
-                    minecraft.setScreen(new InventoryScreen(minecraft.player));
-                }
-            }
-
-            if (controller.bindings().CHANGE_PERSPECTIVE.justPressed()) {
-                CameraType cameraType = minecraft.options.getCameraType();
-                minecraft.options.setCameraType(minecraft.options.getCameraType().cycle());
-                if (cameraType.isFirstPerson() != minecraft.options.getCameraType().isFirstPerson()) {
-                    minecraft.gameRenderer.checkEntityPostEffect(minecraft.options.getCameraType().isFirstPerson() ? minecraft.getCameraEntity() : null);
-                }
-
-                minecraft.levelRenderer.needsUpdate();
-            }
-
-            if (controller.bindings().INVENTORY.justPressed()) {
-                if (minecraft.gameMode.isServerControlledInventory()) {
-                    minecraft.player.sendOpenInventory();
-                } else {
-                    minecraft.getTutorial().onOpenInventory();
-                    minecraft.setScreen(new InventoryScreen(minecraft.player));
-                }
+                cycleHotbar(1);
             }
         }
         if (controller.bindings().TOGGLE_HUD_VISIBILITY.justPressed()) {
@@ -109,7 +74,9 @@ public class InGameInputHandler {
         var player = this.minecraft.player;
         var gamepad = controller instanceof GamepadController ? (GamepadController) controller : null;
 
-        if (!minecraft.mouseHandler.isMouseGrabbed() || (!minecraft.isWindowActive() && !Controlify.instance().config().globalSettings().outOfFocusInput) || minecraft.screen != null || player == null) {
+        boolean controllerLook = Controlify.instance().currentInputMode() == InputMode.CONTROLLER;
+        boolean focusOk = minecraft.isWindowActive() || Controlify.instance().config().globalSettings().outOfFocusInput;
+        if ((!minecraft.mouseHandler.isMouseGrabbed() && !controllerLook) || !focusOk || minecraft.screen != null || player == null) {
             lookInputX = 0;
             lookInputY = 0;
             return;
@@ -173,6 +140,14 @@ public class InGameInputHandler {
 
     public boolean shouldShowPlayerList() {
         return this.shouldShowPlayerList;
+    }
+
+    private void cycleHotbar(double direction) {
+        var inventory = minecraft.player.getInventory();
+        inventory.swapPaint(direction);
+        if (minecraft.player.isSpectator()) {
+            minecraft.gui.getSpectatorGui().onHotbarSelected(inventory.selected);
+        }
     }
 
     public record FunctionalLookInputModifier(BiFunction<Float, Controller<?, ?>, Float> x, BiFunction<Float, Controller<?, ?>, Float> y) implements LookInputModifier {

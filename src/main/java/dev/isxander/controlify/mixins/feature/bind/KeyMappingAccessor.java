@@ -18,4 +18,10 @@ public interface KeyMappingAccessor {
 
     @Accessor("isDown")
     boolean getIsDown();
+
+    @Accessor("clickCount")
+    int getClickCount();
+
+    @Accessor("clickCount")
+    void setClickCount(int clickCount);
 }

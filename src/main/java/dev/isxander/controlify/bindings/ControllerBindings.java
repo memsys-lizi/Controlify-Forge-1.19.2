@@ -171,6 +171,7 @@ public class ControllerBindings<T extends ControllerState> {
                 .defaultBind(GamepadBinds.DPAD_DOWN)
                 .category(GAMEPLAY_CATEGORY)
                 .context(BindContexts.INGAME, BindContexts.INVENTORY)
+                .vanillaOverride(options.keyDrop, () -> false)
                 .build());
         register(NEXT_SLOT = ControllerBindingBuilder.create(controller)
                 .identifier("controlify", "next_slot")
@@ -195,18 +196,21 @@ public class ControllerBindings<T extends ControllerState> {
                 .defaultBind(GamepadBinds.Y_BUTTON)
                 .category(INVENTORY_CATEGORY)
                 .context(BindContexts.INGAME)
+                .vanillaOverride(options.keyInventory, () -> false)
                 .build());
         register(CHANGE_PERSPECTIVE = ControllerBindingBuilder.create(controller)
                 .identifier("controlify", "change_perspective")
                 .defaultBind(GamepadBinds.BACK)
                 .category(GAMEPLAY_CATEGORY)
                 .context(BindContexts.INGAME)
+                .vanillaOverride(options.keyTogglePerspective, () -> false)
                 .build());
         register(SWAP_HANDS = ControllerBindingBuilder.create(controller)
                 .identifier("controlify", "swap_hands")
                 .defaultBind(GamepadBinds.X_BUTTON)
                 .category(INVENTORY_CATEGORY)
                 .context(BindContexts.INGAME, BindContexts.INVENTORY)
+                .vanillaOverride(options.keySwapOffhand, () -> false)
                 .build());
         register(OPEN_CHAT = ControllerBindingBuilder.create(controller)
                 .identifier("controlify", "open_chat")
@@ -287,6 +291,7 @@ public class ControllerBindings<T extends ControllerState> {
                 .defaultBind(GamepadBinds.DPAD_RIGHT)
                 .category(MISC_CATEGORY)
                 .context(BindContexts.INGAME)
+                .vanillaOverride(options.keyPlayerList, () -> false)
                 .build());
         register(VMOUSE_MOVE_UP = ControllerBindingBuilder.create(controller)
                 .identifier("controlify", "vmouse_move_up")
@@ -536,30 +541,54 @@ public class ControllerBindings<T extends ControllerState> {
     }
 
     private void imitateVanillaClick() {
+        // Do not call justPressed() here. That claims the physical button and later
+        // movement / GUI code in the same tick would miss the edge.
         ControllerBindingImpl.clearPressedBinds(controller);
 
-        if (Controlify.instance().currentInputMode() != InputMode.CONTROLLER)
-            return;
-        if (Minecraft.getInstance().screen != null && !Minecraft.getInstance().screen.passEvents)
-            return;
+        var minecraft = Minecraft.getInstance();
+        boolean drive = Controlify.instance().currentInputMode() == InputMode.CONTROLLER
+                && (minecraft.screen == null || minecraft.screen.passEvents);
 
         for (var binding : registry().values()) {
             var override = binding.override();
             if (override == null) continue;
-            if (!ControlifyKeys.isKeyActive(override.keyMapping())) continue;
 
-            var accessor = (KeyMappingAccessor) override.keyMapping();
-            var vanillaKeyCode = override.keyMapping().getKey();
+            KeyMapping mapping = override.keyMapping();
+            var accessor = (KeyMappingAccessor) mapping;
+            boolean vanillaToggle = mapping instanceof ToggleKeyMapping toggle
+                    && ((ToggleKeyMappingAccessor) toggle).getNeedsToggle().getAsBoolean();
+            boolean toggle = override.toggleable().getAsBoolean() || vanillaToggle;
+            boolean edge = binding.held() && !binding.prevHeld();
 
-            if (override.toggleable().getAsBoolean()) {
-                if (binding.justPressed()) {
-                    // must set field directly to avoid ToggleKeyMapping breaking things
-                    accessor.setIsDown(!accessor.getIsDown());
+            if (!drive || !ControlifyKeys.isContextActive(mapping)) {
+                if (!toggle) {
+                    accessor.setIsDown(false);
+                    ControlifyKeys.clearAsserted(mapping);
+                }
+                continue;
+            }
+
+            if (toggle) {
+                if (edge) {
+                    boolean next = !accessor.getIsDown();
+                    accessor.setIsDown(next);
+                    if (next) {
+                        ControlifyKeys.assertDown(mapping, true);
+                    } else {
+                        ControlifyKeys.clearAsserted(mapping);
+                    }
+                    accessor.setClickCount(accessor.getClickCount() + 1);
+                }
+            } else if (binding.held()) {
+                accessor.setIsDown(true);
+                ControlifyKeys.assertDown(mapping, false);
+                if (edge) {
+                    accessor.setClickCount(accessor.getClickCount() + 1);
                 }
             } else {
-                KeyMapping.set(vanillaKeyCode, binding.held());
+                accessor.setIsDown(false);
+                ControlifyKeys.clearAsserted(mapping);
             }
-            if (binding.justPressed()) KeyMapping.click(vanillaKeyCode);
         }
     }
 

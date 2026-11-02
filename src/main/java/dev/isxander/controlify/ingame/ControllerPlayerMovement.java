@@ -2,6 +2,9 @@ package dev.isxander.controlify.ingame;
 
 import dev.isxander.controlify.Controlify;
 import dev.isxander.controlify.controller.Controller;
+import dev.isxander.controlify.mixins.feature.bind.KeyMappingAccessor;
+import dev.isxander.controlify.platform.ControlifyKeys;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.Input;
 import net.minecraft.client.player.LocalPlayer;
@@ -26,6 +29,7 @@ public class ControllerPlayerMovement extends Input {
             this.forwardImpulse = 0;
             this.jumping = false;
             this.shiftKeyDown = false;
+            mirrorVanillaKeys();
             return;
         }
 
@@ -51,8 +55,11 @@ public class ControllerPlayerMovement extends Input {
         }
 
         // this over-complication is so exiting a GUI with the button still held doesn't trigger a jump.
-        if (bindings.JUMP.justPressed())
+        if (bindings.JUMP.justPressed()) {
             this.jumping = true;
+            var jump = (KeyMappingAccessor) Minecraft.getInstance().options.keyJump;
+            jump.setClickCount(jump.getClickCount() + 1);
+        }
         if (!bindings.JUMP.held())
             this.jumping = false;
 
@@ -65,6 +72,29 @@ public class ControllerPlayerMovement extends Input {
             if (bindings.SNEAK.justPressed()) {
                 this.shiftKeyDown = !this.shiftKeyDown;
             }
+        }
+
+        mirrorVanillaKeys();
+    }
+
+    /**
+     * Mods read {@code keyJump} / {@code keyShift} rather than {@link Input}.
+     * Mirror the state this tick actually applied, including toggle sneak and the
+     * "don't jump when a GUI closes with the button still held" rule.
+     */
+    private void mirrorVanillaKeys() {
+        var options = Minecraft.getInstance().options;
+        mirror(options.keyJump, this.jumping);
+        mirror(options.keyShift, this.shiftKeyDown);
+    }
+
+    private static void mirror(KeyMapping mapping, boolean down) {
+        var accessor = (KeyMappingAccessor) mapping;
+        accessor.setIsDown(down);
+        if (down && ControlifyKeys.isContextActive(mapping)) {
+            ControlifyKeys.assertDown(mapping, false);
+        } else {
+            ControlifyKeys.clearAsserted(mapping);
         }
     }
 }

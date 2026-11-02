@@ -1,6 +1,5 @@
 package dev.isxander.controlify.mixins.core;
 
-import com.llamalad7.mixinextras.sugar.Local;
 import dev.isxander.controlify.Controlify;
 import dev.isxander.controlify.InputMode;
 import dev.isxander.controlify.ingame.ControllerPlayerMovement;
@@ -30,8 +29,9 @@ public class ClientPacketListenerMixin {
     }
 
     @Inject(method = "handleRespawn", at = @At(value = "FIELD", target = "Lnet/minecraft/client/player/LocalPlayer;input:Lnet/minecraft/client/player/Input;", opcode = Opcodes.PUTFIELD, shift = At.Shift.AFTER))
-    private void overrideRespawnInput(ClientboundRespawnPacket packet, CallbackInfo ci, @Local(ordinal = 1) LocalPlayer newPlayer) {
-        overrideInput(newPlayer);
+    private void overrideRespawnInput(ClientboundRespawnPacket packet, CallbackInfo ci) {
+        // minecraft.player is already the new player before the KeyboardInput write.
+        overrideInput(minecraft.player);
     }
 
     private void overrideInput(LocalPlayer player) {

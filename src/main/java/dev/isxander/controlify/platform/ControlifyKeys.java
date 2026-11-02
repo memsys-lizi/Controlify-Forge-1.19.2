@@ -9,7 +9,10 @@ import net.minecraftforge.client.settings.KeyConflictContext;
 import net.minecraftforge.client.settings.KeyModifier;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Registers Controlify's own {@link KeyMapping}s on {@link RegisterKeyMappingsEvent}.
@@ -53,14 +56,25 @@ public final class ControlifyKeys {
     }
 
     /**
+     * True when this mapping's {@link IKeyConflictContext} is active (in-game, GUI, or universal).
+     * A controller bind names one mapping, so the physical {@link KeyModifier} is not required:
+     * the modifier only chooses which mapping shares a keyboard key. Context still gates it.
+     */
+    public static boolean isContextActive(KeyMapping mapping) {
+        IKeyConflictContext context = mapping.getKeyConflictContext();
+        return context == null || context.isActive();
+    }
+
+    /**
      * Forge key mappings can be inactive because of {@link IKeyConflictContext} (in-game vs GUI)
-     * or because a {@link KeyModifier} such as Shift is not held. Imitated clicks must skip those.
+     * or because a {@link KeyModifier} such as Shift is not held. Keyboard-style checks use both.
+     * Controller imitation uses {@link #isContextActive} and presses that one mapping.
      */
     public static boolean isKeyActive(KeyMapping mapping) {
-        IKeyConflictContext context = mapping.getKeyConflictContext();
-        if (context != null && !context.isActive()) {
+        if (!isContextActive(mapping)) {
             return false;
         }
+        IKeyConflictContext context = mapping.getKeyConflictContext();
         KeyModifier modifier = mapping.getKeyModifier();
         if (modifier != null && modifier != KeyModifier.NONE) {
             IKeyConflictContext modifierContext = context != null ? context : KeyConflictContext.UNIVERSAL;
@@ -69,5 +83,35 @@ public final class ControlifyKeys {
             }
         }
         return true;
+    }
+
+    private static final Set<KeyMapping> ASSERTED = Collections.newSetFromMap(new IdentityHashMap<>());
+    private static final Set<KeyMapping> ASSERTED_TOGGLES = Collections.newSetFromMap(new IdentityHashMap<>());
+
+    /**
+     * Mark a mapping as held by the controller. {@code isDown()} then ignores the physical
+     * modifier and still requires the conflict context, unless {@code toggle} is set.
+     * Toggle mappings stay down after the button is released, matching vanilla sneak/sprint.
+     */
+    public static void assertDown(KeyMapping mapping, boolean toggle) {
+        ASSERTED.add(mapping);
+        if (toggle) {
+            ASSERTED_TOGGLES.add(mapping);
+        } else {
+            ASSERTED_TOGGLES.remove(mapping);
+        }
+    }
+
+    public static void clearAsserted(KeyMapping mapping) {
+        ASSERTED.remove(mapping);
+        ASSERTED_TOGGLES.remove(mapping);
+    }
+
+    public static boolean isControllerAsserted(KeyMapping mapping) {
+        return ASSERTED.contains(mapping);
+    }
+
+    public static boolean isAssertedToggle(KeyMapping mapping) {
+        return ASSERTED_TOGGLES.contains(mapping);
     }
 }

@@ -4,7 +4,7 @@ This is an **unofficial** port of Controlify 1.2.1 (Fabric, Minecraft 1.19.4, ta
 
 The mod display name is **Controlify (Unofficial Forge 1.19.2 Port)**.
 
-Phase 0 is a bootable jar. Gameplay input is not done yet.
+Phase 0 is a bootable jar. Phase 1 wires controller gameplay through Forge `KeyMapping`. Virtual-mouse navigation, rumble, and the config screen are still later phases.
 
 ## What phase 0 changed
 
@@ -80,9 +80,21 @@ About 80 mixins were checked against 1.19.2. Ones that target classes or members
 - `feature.rumble.blockbreak.MultiPlayerGameModeMixin` injects Forge's patched `lambda$startDestroyBlock$1` (the lambda takes `PlayerInteractEvent.LeftClickBlock`). That name is the same in the official and SRG Forge jars, so it is not in the refmap. If a future Forge build renames it, block-break rumble will fail to apply and the game will not boot until the inject is updated.
 - `ContainerButtonGuide.setup()` is still never called (same as upstream 1.2.1). The class was ported to Forge screen events so it compiles.
 
+## Phase 1: in-game controls
+
+Controller gameplay uses the 1.2.1 binds (left stick move, right stick look, triggers attack/use, A jump, stick click sneak, stick click sprint, bumpers change hotbar slot, Y inventory, Start pause). There is no config screen yet, so the defaults are what you get.
+
+- Movement is `ControllerPlayerMovement`, installed when a controller is current and again on login/respawn. Jump and sneak are mirrored onto `keyJump` and `keyShift`, including toggle sneak and the rule that a jump button held across a GUI does not jump when the GUI closes.
+- Look runs from the right stick during `MouseHandler.turnPlayer`. Controller mode does not require the cursor to be grabbed.
+- Attack, use/place, drop, swap hands, inventory, perspective, chat, pick block, sprint, and the player list press that one `KeyMapping`. `isDown()` and `consumeClick()` see it. `KeyMapping.set` / `KeyMapping.click` are not used: on Forge those hit every mapping bound to the same key, and `click` follows whichever modifier is physically held.
+- A controller bind names one mapping. Its `IKeyConflictContext` must be active (in-game versus GUI). Its `KeyModifier` selects the mapping and is not required on the keyboard, so a Shift-modified mod bind still fires from the controller without holding Shift, and a plain bind does not also fire the Shift variant.
+- Toggle mappings (`ToggleKeyMapping`, or Controlify's toggle sprint) latch on press. Holding them does not flip every tick.
+- Hotbar bumpers call `Inventory.swapPaint`. Spectator mode also notifies the spectator hotbar. Slots 1–9 stay keyboard keys.
+- Pause calls `pauseGame`. It is not a `KeyMapping`.
+
 ## Later phases (not in this change)
 
-1. Movement, look, attack, place, hotbar.
+1. Movement, look, attack, place, and hotbar are in phase 1.
 2. Virtual mouse and GUI navigation (the 1.19.4 focus API has to be rebuilt; `TabNavigationBar` and Create World stay disabled until then).
 3. Button hints, rumble (this is the part players care about most), reach-around assist.
 4. Config screen (no YACL on this Forge version; a Forge or handmade screen).

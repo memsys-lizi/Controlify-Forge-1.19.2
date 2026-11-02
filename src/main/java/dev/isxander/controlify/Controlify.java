@@ -419,6 +419,7 @@ public class Controlify implements ControlifyApi {
         }
 
         this.inGameInputHandler = new InGameInputHandler(controller);
+        this.inGameInputHandler.applyToPlayer(currentInputMode);
         if (minecraft.player != null) {
             this.inGameButtonGuide = new InGameButtonGuide(controller, Minecraft.getInstance().player);
         }
@@ -464,6 +465,7 @@ public class Controlify implements ControlifyApi {
                 this.inGameButtonGuide = this.getCurrentController().map(c -> new InGameButtonGuide(c, Minecraft.getInstance().player)).orElse(null);
             }
         }
+        this.inGameInputHandler().ifPresent(handler -> handler.applyToPlayer(currentInputMode));
         if (Blaze3D.getTime() - lastInputSwitchTime < 20) {
             consecutiveInputSwitches++;
         } else {
