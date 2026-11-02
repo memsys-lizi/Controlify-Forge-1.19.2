@@ -41,6 +41,16 @@ minecraft {
             }
         }
 
+        // Boots the jar-in-jar artifact (not the Gradle source mod) next to a mod that
+        // reads both JNA modules. Userdev does not load jar-in-jar for source mods, so
+        // runClient cannot reproduce the production ResolutionException.
+        // A brand-new run has no Forge main class; parent the client run for that.
+        clientJnaProbe {
+            parent minecraft.runs.client
+            workingDirectory project.file('run-jna-probe')
+            property 'controlify.loadSdlOnStartup', 'true'
+        }
+
         server {
             workingDirectory project.file('run')
             property 'forge.logging.markers', 'REGISTRIES'
@@ -80,45 +90,60 @@ dependencies {
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
     jarJar(group: 'com.github.llamalad7.mixinextras', name: 'mixinextras-forge', version: '0.2.0-beta.8') {
         jarJar.ranged(it, '[0.2.0-beta.8,0.3.0)')
+        transitive = false
     }
 
-    // Controller connection identification. JNA is hid4java's native backend and must ship with it.
+    // Controller connection identification. hid4java calls JNA (Pointer, Structure, WString).
+    // Minecraft 1.19.2 / Forge 43.5.2 already modules net.java.dev.jna:jna and jna-platform
+    // (5.10.0 in the vanilla POM, 5.12.1 on the Forge userdev module path). Do not jarJar
+    // either artifact: a second com.sun.jna module splits com.sun.jna.internal with
+    // com.sun.jna.platform and mods such as healthoverlay fail to resolve.
     jarJar(group: 'org.hid4java', name: 'hid4java', version: '0.7.0') {
         jarJar.ranged(it, '[0.7,0.8)')
-    }
-    jarJar(group: 'net.java.dev.jna', name: 'jna', version: '5.6.0') {
-        jarJar.ranged(it, '[5.6,6.0)')
+        transitive = false
     }
 
     // Controller rumble. SDL2 natives are downloaded at runtime by SDL2NativesManager.
     jarJar(group: 'dev.isxander', name: 'sdl2-jni', version: '2.26.5-18') {
         jarJar.ranged(it, '[2.26.5-18,2.27)')
+        transitive = false
     }
 
-    // hiddb.json5 parsing. annotations is a compile dependency of quilt-json5.
+    // hiddb.json5 parsing. JetBrains annotations are CLASS retention and Minecraft already
+    // ships org.jetbrains:annotations:23.0.0. Embedding 20.1.0 is a second annotations module.
     jarJar(group: 'org.quiltmc', name: 'quilt-json5', version: '1.0.3') {
         jarJar.ranged(it, '[1.0.3,1.1)')
-    }
-    jarJar(group: 'org.jetbrains', name: 'annotations', version: '20.1.0') {
-        jarJar.ranged(it, '[20.1.0,25)')
+        transitive = false
     }
 
     // 1.19.2 does not bundle JOML. The 1.19.4 sources use it for GUI layout and the virtual cursor.
+    // Range accepts any 1.10.x another mod already jarJar'd.
     implementation 'org.joml:joml:1.10.5'
     jarJar(group: 'org.joml', name: 'joml', version: '1.10.5') {
-        jarJar.ranged(it, '[1.10.5,1.11)')
+        jarJar.ranged(it, '[1.10,1.11)')
+        transitive = false
     }
 
-    implementation 'org.hid4java:hid4java:0.7.0'
-    implementation 'net.java.dev.jna:jna:5.6.0'
+    implementation('org.hid4java:hid4java:0.7.0') {
+        exclude group: 'net.java.dev.jna', module: 'jna'
+    }
     implementation 'dev.isxander:sdl2-jni:2.26.5-18'
-    implementation 'org.quiltmc:quilt-json5:1.0.3'
-    implementation 'org.jetbrains:annotations:20.1.0'
+    implementation('org.quiltmc:quilt-json5:1.0.3') {
+        exclude group: 'org.jetbrains', module: 'annotations'
+    }
+    compileOnly 'org.jetbrains:annotations:23.0.0'
 }
 
 // Userdev does not load jar-in-jar mods. MixinExtras is a real mod (mods.toml), so the
 // Gradle client/server runs need the forge artifact in the game mods folder. The production
 // jar still embeds it via jarJar above.
+configurations.create('probeJnaBundle')
+dependencies {
+    probeJnaBundle('net.java.dev.jna:jna:5.12.1') {
+        transitive = false
+    }
+}
+
 configurations.create('mixinExtrasForge')
 dependencies.add('mixinExtrasForge', 'com.github.llamalad7.mixinextras:mixinextras-forge:0.2.0-beta.8')
 def copyDevMods = tasks.register('copyDevMods', Copy) {
@@ -148,6 +173,9 @@ def refmapFile = layout.buildDirectory.file('tmp/compileJava/controlify.refmap.j
 def outTsrg = layout.buildDirectory.file('tmp/compileJava/out.tsrg')
 
 tasks.withType(JavaCompile).configureEach {
+    if (name == 'compileJnaProbe') {
+        return
+    }
     dependsOn 'createMcpToSrg'
     options.encoding = 'UTF-8'
     options.release.set(17)
@@ -233,12 +261,127 @@ afterEvaluate {
         }
     }
     tasks.named('build').configure {
-        dependsOn 'reobfJarJar'
+        dependsOn 'reobfJarJar', 'verifyNoBundledJna'
+    }
+    tasks.named('reobfJarJar').configure {
+        dependsOn 'captureMcpAllJar'
     }
 }
 
+tasks.matching { it.name == 'runClient' }.configureEach {
+    dependsOn 'copyJnaProbeToDevMods'
+}
+tasks.matching { it.name == 'runClientJnaProbe' }.configureEach {
+    dependsOn 'prepareJnaProbeMods'
+}
+
 tasks.withType(JavaCompile).configureEach {
+    if (name == 'compileJnaProbe') {
+        return
+    }
     options.compilerArgs += ['-Xlint:-processing', '-Xlint:-removal']
+}
+
+def probeClasses = layout.buildDirectory.dir('jnaprobe/classes')
+
+tasks.register('compileJnaProbe', JavaCompile) {
+    source = fileTree('probe/jnaprobe/src')
+    classpath = sourceSets.main.compileClasspath
+    destinationDirectory = probeClasses
+    options.encoding = 'UTF-8'
+    options.release.set(17)
+    sourceCompatibility = '17'
+    targetCompatibility = '17'
+}
+
+tasks.register('buildJnaProbe', Jar) {
+    dependsOn 'compileJnaProbe'
+    archiveFileName = 'healthoverlay-jna-probe.jar'
+    destinationDirectory = layout.buildDirectory.dir('jnaprobe')
+    from(probeClasses)
+    from('probe/jnaprobe/resources')
+    from(configurations.probeJnaBundle) {
+        into 'META-INF/libraries'
+    }
+}
+
+tasks.register('captureMcpAllJar', Copy) {
+    dependsOn 'jarJar'
+    from(tasks.named('jarJar', Jar).flatMap { it.archiveFile })
+    into layout.buildDirectory.dir('mcp-libs')
+    rename { 'controlify-mcp-all.jar' }
+}
+
+tasks.register('prepareJnaProbeMods', Sync) {
+    dependsOn 'captureMcpAllJar', 'buildJnaProbe'
+    from(layout.buildDirectory.dir('mcp-libs'))
+    from(tasks.named('buildJnaProbe', Jar).flatMap { it.archiveFile })
+    into layout.projectDirectory.dir('run-jna-probe/mods')
+}
+
+tasks.register('copyJnaProbeToDevMods', Copy) {
+    dependsOn 'buildJnaProbe'
+    from(tasks.named('buildJnaProbe', Jar).flatMap { it.archiveFile })
+    into layout.projectDirectory.dir('run/mods')
+}
+
+tasks.register('verifyNoBundledJna') {
+    dependsOn 'reobfJarJar'
+    def allJar = tasks.named('jarJar', Jar).flatMap { it.archiveFile }
+    inputs.file allJar
+    doLast {
+        def jar = allJar.get().asFile
+        def forbidden = []
+        def present = [] as Set
+        def allowed = ['mixinextras-forge', 'hid4java', 'sdl2-jni', 'quilt-json5', 'joml'] as Set
+        new java.util.zip.ZipFile(jar).withCloseable { zip ->
+            def meta = zip.getEntry('META-INF/jarjar/metadata.json')
+            if (meta == null) {
+                throw new GradleException("${jar} has no META-INF/jarjar/metadata.json")
+            }
+            def text = zip.getInputStream(meta).getText('UTF-8')
+            ['"artifact": "jna"', '"artifact": "jna-platform"', '"artifact": "annotations"', 'com.sun.jna', 'org.jetbrains'].each { needle ->
+                if (text.contains(needle)) {
+                    forbidden << "metadata.json contains ${needle}"
+                }
+            }
+            text.readLines().findAll { it.contains('"artifact"') }.each { line ->
+                def artifact = (line =~ /"artifact": "([^"]+)"/)[0][1]
+                present << artifact
+                if (!allowed.contains(artifact)) {
+                    forbidden << "unexpected jarJar artifact ${artifact}"
+                }
+            }
+            zip.entries().each { entry ->
+                def name = entry.name
+                if (!name.startsWith('META-INF/jarjar/') || !name.endsWith('.jar')) {
+                    return
+                }
+                def lower = name.toLowerCase()
+                if (lower.contains('jna') || lower.contains('annotation')) {
+                    forbidden << name
+                }
+                def bytes = zip.getInputStream(entry).bytes
+                new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(bytes)).withCloseable { nested ->
+                    java.util.zip.ZipEntry nestedEntry
+                    while ((nestedEntry = nested.nextEntry) != null) {
+                        def nestedName = nestedEntry.name
+                        if (nestedName.startsWith('com/sun/jna/') || nestedName.startsWith('org/jetbrains/annotations/')) {
+                            forbidden << "${name}!${nestedName}"
+                        }
+                    }
+                }
+            }
+        }
+        def missing = allowed - present
+        if (!missing.isEmpty()) {
+            throw new GradleException("${jar.name} is missing jarJar artifacts ${missing}")
+        }
+        if (!forbidden.isEmpty()) {
+            throw new GradleException("${jar.name} still embeds a JNA or annotations module: ${forbidden}")
+        }
+        logger.lifecycle("jarJar modules in ${jar.name}: ${present.sort()}")
+    }
 }
 
 publishing {

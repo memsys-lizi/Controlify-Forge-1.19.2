@@ -26,16 +26,29 @@ Phase 0 is a bootable jar. Phase 1 wires controller gameplay through Forge `KeyM
 | Artifact | Why |
 | --- | --- |
 | `com.github.llamalad7.mixinextras:mixinextras-forge:0.2.0-beta.8` | MixinExtras Forge mod. Compile against `mixinextras-common` of the same version. |
-| `org.hid4java:hid4java:0.7.0` | Controller connection identification. |
-| `net.java.dev.jna:jna:5.6.0` | hid4java native backend. Not requested by name, but hid4java does not work without it. |
+| `org.hid4java:hid4java:0.7.0` | Controller connection identification. Transitive JNA is excluded. |
 | `dev.isxander:sdl2-jni:2.26.5-18` | Rumble / SDL. Natives are downloaded, not embedded. |
-| `org.quiltmc:quilt-json5:1.0.3` | `hiddb.json5`. |
-| `org.jetbrains:annotations:20.1.0` | Compile dependency of quilt-json5. |
-| `org.joml:joml:1.10.5` | 1.19.2 does not bundle JOML. The 1.19.4 sources use it for layout and the virtual cursor. |
+| `org.quiltmc:quilt-json5:1.0.3` | `hiddb.json5`. Transitive JetBrains annotations are excluded. |
+| `org.joml:joml:1.10.5` | 1.19.2 does not bundle JOML. Accepted range is `[1.10,1.11)` so another mod's 1.10.x jarJar can win. |
 
-The same coordinates are also `implementation` so they are on the compile and dev runtime classpath. jarJar is not `fromRuntimeConfiguration` (that would embed Minecraft and Forge).
+Not embedded, because Minecraft 1.19.2 / Forge 43.5.2 already put them on the game module layer:
 
-Gradle `runClient` / `runServer` also put JOML, hid4java, sdl2-jni, and quilt-json5 on the Forge userdev Minecraft classpath (`minecraftArtifacts`). BootstrapLauncher builds the game module layer from that list, not from the Gradle `-cp`, so mixins cannot see those classes otherwise. JNA 5.12 and JetBrains annotations 23 are already on that classpath; the older jarJar copies are not added again. Userdev does not load jar-in-jar mods, so the MixinExtras Forge jar is copied into `run/mods` for those runs. The production `-all` jar still embeds it.
+| Artifact | Where it comes from |
+| --- | --- |
+| `net.java.dev.jna:jna` and `jna-platform` | Vanilla POM 5.10.0. Forge 43.5.2 userdev modules 5.12.1. hid4java 0.7.0 was built against JNA 5.6.0 (`Pointer`, `Structure`, `WString`) and runs on that newer JNA. |
+| `org.jetbrains:annotations:23.0.0` | Minecraft. quilt-json5 only needs them at compile time (CLASS retention). Compile uses 23.0.0, not the 20.1.0 quilt-json5 POM lists. |
+
+Embedding `jna-5.6.0.jar` made a second automatic module `com.sun.jna` next to Forge's `com.sun.jna.platform`. Both then exported `com.sun.jna.internal` to mods whose module name is `healthoverlay` (Health Overlay, and anything else that reads both JNA modules), and the game died in `ResolutionException` before the menu. Embedding annotations 20.1.0 was the same kind of extra module (`org.jetbrains.annotations`) next to Minecraft's annotations 23 and mods such as l2library. Gson, Guava, Log4j, and Netty are not jarJar'd. Every jarJar dependency is `transitive = false`, so a library cannot pull those in.
+
+JNA is not relocated. hid4java looks up `jnidispatch` from the JNA jar it was loaded with; a private copy would miss that native library. hid4java stays its own jar-in-jar module and calls Forge's JNA.
+
+The same coordinates (except JNA and annotations) are also `implementation` so they are on the compile and dev runtime classpath. jarJar is not `fromRuntimeConfiguration` (that would embed Minecraft and Forge).
+
+Gradle `runClient` / `runServer` also put JOML, hid4java, sdl2-jni, and quilt-json5 on the Forge userdev Minecraft classpath (`minecraftArtifacts`). BootstrapLauncher builds the game module layer from that list, not from the Gradle `-cp`, so mixins cannot see those classes otherwise. JNA and JetBrains annotations are already on that classpath. Userdev does not load jar-in-jar for the Gradle source mod, so the MixinExtras Forge jar is copied into `run/mods` for those runs. The production `-all` jar still embeds MixinExtras, hid4java, sdl2-jni, quilt-json5, and JOML.
+
+`./gradlew build` runs `verifyNoBundledJna`, which fails if the reobfuscated `-all` jar's `META-INF/jarjar` lists or contains JNA, jna-platform, or JetBrains annotations.
+
+`./gradlew runClientJnaProbe` is the modpack check. It does not add Controlify as a source mod. It copies the pre-reobfuscation `-all` jar (same jar-in-jar payload, official names so userdev mixins apply) and `healthoverlay-jna-probe.jar` into `run-jna-probe/mods`. The probe's mod id is `healthoverlay`, so Forge's module name is `healthoverlay`. It loads `com.sun.jna.Native`, `com.sun.jna.platform.WindowUtils`, and `com.sun.jna.internal.ReflectionUtils` from the game layer, and it carries `jna-5.12.1.jar` under `META-INF/libraries` without Jar-in-Jar metadata. `runClient` copies that same probe into `run/mods`. A good log has `JNA probe module healthoverlay sees module com.sun.jna`, `Initialised SDL2`, the main menu, and no `ResolutionException`.
 
 ## Mixins
 
@@ -123,4 +136,10 @@ A successful SDL check in `run/logs/latest.log` looks like:
 - `Initialised SDL2` (debug) and no `Failed to load SDL2` / `Failed to initialise SDL2`
 - The main menu, with no controller attached
 
-Install `build/libs/controlify-1.2.1+1.19.2-forge-all.jar`. That is the reobfuscated jar with jarJar libraries (MixinExtras, hid4java, JNA, sdl2-jni, quilt-json5, annotations, JOML). The thinner `controlify-1.2.1+1.19.2-forge.jar` is the same code without those libraries and will not load. Both are production (SRG) jars. Do not put them on the Gradle dev classpath.
+Install `build/libs/controlify-1.2.1+1.19.2-forge-all.jar`. That is the reobfuscated jar with jarJar libraries (MixinExtras, hid4java, sdl2-jni, quilt-json5, JOML). It does not embed JNA or JetBrains annotations. The thinner `controlify-1.2.1+1.19.2-forge.jar` is the same code without those libraries and will not load. Both are production (SRG) jars. Do not put them on the Gradle dev classpath.
+
+```bash
+./gradlew runClientJnaProbe
+```
+
+`runClientJnaProbe` is headless-unfriendly as well. Use `xvfb-run` when there is no display.

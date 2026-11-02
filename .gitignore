@@ -1,4 +1,5 @@
 run
+run-jna-probe
 build
 /.idea
 .gradle

@@ -1,0 +1,24 @@
+modLoader="javafml"
+loaderVersion="[43,)"
+license="LGPL-3.0-or-later"
+
+[[mods]]
+modId="healthoverlay"
+version="0.0.0-jna-probe"
+displayName="JNA Probe (healthoverlay stand-in)"
+authors="controlify forge port"
+description='''Loads with Controlify to reproduce the modpack case where healthoverlay reads both JNA modules. A jna jar is stored in this file and is not installed as its own module.'''
+
+[[dependencies.healthoverlay]]
+    modId="forge"
+    mandatory=true
+    versionRange="[43.5.2,44)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.healthoverlay]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[1.19.2,1.19.3)"
+    ordering="NONE"
+    side="BOTH"

@@ -17,6 +17,6 @@ This branch builds a client jar and boots the game. Phase 1 drives movement, loo
 ./gradlew runClient
 ```
 
-`runClient` sets `controlify.loadSdlOnStartup=true`, so SDL2 is initialised during startup. A physical controller is not required for that check: the native library should download and load, and the game should reach the main menu.
+`runClient` sets `controlify.loadSdlOnStartup=true`, so SDL2 is initialised during startup. A physical controller is not required for that check: the native library should download and load, and the game should reach the main menu. `./gradlew runClientJnaProbe` boots the jar-in-jar build next to a small mod that reads Forge's JNA the way Health Overlay does.
 
 Java 17 is required. ForgeGradle uses the official Mojang mappings.
