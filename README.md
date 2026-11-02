@@ -10,7 +10,7 @@ What changed, which mixins are disabled, and what later phases still have to do 
 
 ## Phase 0 status
 
-This branch builds a client jar and boots the game. Phase 1 drives movement, look, attack, use, jump, sneak, sprint, hotbar, inventory, and pause from the controller through Forge `KeyMapping` (conflict context and key modifier). GUI navigation, rumble, and the config screen are still later phases.
+This branch builds a client jar and boots the game. Phase 1 drives movement, look, attack, use, jump, sneak, sprint, hotbar, inventory, and pause from the controller through Forge `KeyMapping` (conflict context and key modifier). Phase 2 adds the virtual cursor and stick navigation for buttons, lists, sliders, and container slots. Rumble and the config screen are still later phases.
 
 ```bash
 ./gradlew build

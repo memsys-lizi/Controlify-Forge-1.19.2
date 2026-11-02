@@ -46,6 +46,8 @@
     "feature.screenop.vanilla.AbstractButtonMixin",
     "feature.screenop.vanilla.AbstractContainerEventHandlerMixin",
     "feature.screenop.vanilla.AbstractContainerScreenMixin",
+    "feature.screenop.vanilla.AbstractSelectionListAccessor",
+    "feature.screenop.vanilla.AbstractSliderButtonMixin",
     "feature.screenop.vanilla.ContainerObjectSelectionListEntryMixin",
     "feature.screenop.vanilla.CreativeModeInventoryScreenAccessor",
     "feature.screenop.vanilla.CreativeModeInventoryScreenMixin",

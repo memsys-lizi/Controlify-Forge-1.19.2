@@ -38,6 +38,7 @@ public class VirtualMouseHandler {
 
     private final Minecraft minecraft;
     private boolean virtualMouseEnabled;
+    private boolean synthesizingCursor;
 
     private Set<SnapPoint> snapPoints;
     private SnapPoint lastSnappedPoint;
@@ -54,7 +55,12 @@ public class VirtualMouseHandler {
     }
 
     public void handleControllerInput(Controller<?, ?> controller) {
-        if (controller.bindings().VMOUSE_TOGGLE.justPressed()) {
+        VirtualMouseBehaviour behaviour = minecraft.screen == null
+                ? VirtualMouseBehaviour.DEFAULT
+                : ScreenProcessorProvider.provide(minecraft.screen).virtualMouseBehaviour();
+        // Inventory uses BACK for a slot bind. Consuming VMOUSE_TOGGLE there shows the
+        // "virtual mouse unavailable" toast on a button that is not the toggle.
+        if (behaviour == VirtualMouseBehaviour.DEFAULT && controller.bindings().VMOUSE_TOGGLE.justPressed()) {
             toggleVirtualMouse();
         }
 
@@ -62,32 +68,36 @@ public class VirtualMouseHandler {
             return;
         }
 
-        var impulseY = controller.bindings().VMOUSE_MOVE_DOWN.state() - controller.bindings().VMOUSE_MOVE_UP.state();
-        var impulseX = controller.bindings().VMOUSE_MOVE_RIGHT.state() - controller.bindings().VMOUSE_MOVE_LEFT.state();
-        var prevImpulseY = controller.bindings().VMOUSE_MOVE_DOWN.prevState() - controller.bindings().VMOUSE_MOVE_UP.prevState();
-        var prevImpulseX = controller.bindings().VMOUSE_MOVE_RIGHT.prevState() - controller.bindings().VMOUSE_MOVE_LEFT.prevState();
+        // Container screens move the cursor one slot at a time. Free stick movement
+        // and snap-on-release fight that.
+        if (behaviour != VirtualMouseBehaviour.CURSOR_ONLY) {
+            var impulseY = controller.bindings().VMOUSE_MOVE_DOWN.state() - controller.bindings().VMOUSE_MOVE_UP.state();
+            var impulseX = controller.bindings().VMOUSE_MOVE_RIGHT.state() - controller.bindings().VMOUSE_MOVE_LEFT.state();
+            var prevImpulseY = controller.bindings().VMOUSE_MOVE_DOWN.prevState() - controller.bindings().VMOUSE_MOVE_UP.prevState();
+            var prevImpulseX = controller.bindings().VMOUSE_MOVE_RIGHT.prevState() - controller.bindings().VMOUSE_MOVE_LEFT.prevState();
 
-        if (minecraft.screen != null && minecraft.screen instanceof ISnapBehaviour snapBehaviour) {
-            snapPoints = snapBehaviour.getSnapPoints();
-        } else {
-            snapPoints = Set.of();
+            if (minecraft.screen != null && minecraft.screen instanceof ISnapBehaviour snapBehaviour) {
+                snapPoints = snapBehaviour.getSnapPoints();
+            } else {
+                snapPoints = Set.of();
+            }
+
+            // if just released stick, snap to nearest snap point
+            if (impulseX == 0 && impulseY == 0) {
+                if ((prevImpulseX != 0 || prevImpulseY != 0))
+                    snapToClosestPoint();
+            }
+
+            var sensitivity = controller.config().virtualMouseSensitivity;
+
+            // quadratic function to make small movements smaller
+            // abs to keep sign
+            targetX += impulseX * Mth.abs(impulseX) * 20f * sensitivity;
+            targetY += impulseY * Mth.abs(impulseY) * 20f * sensitivity;
+
+            targetX = Mth.clamp(targetX, 0, minecraft.getWindow().getScreenWidth());
+            targetY = Mth.clamp(targetY, 0, minecraft.getWindow().getScreenHeight());
         }
-
-        // if just released stick, snap to nearest snap point
-        if (impulseX == 0 && impulseY == 0) {
-            if ((prevImpulseX != 0 || prevImpulseY != 0))
-                snapToClosestPoint();
-        }
-
-        var sensitivity = controller.config().virtualMouseSensitivity;
-
-        // quadratic function to make small movements smaller
-        // abs to keep sign
-        targetX += impulseX * Mth.abs(impulseX) * 20f * sensitivity;
-        targetY += impulseY * Mth.abs(impulseY) * 20f * sensitivity;
-
-        targetX = Mth.clamp(targetX, 0, minecraft.getWindow().getWidth());
-        targetY = Mth.clamp(targetY, 0, minecraft.getWindow().getHeight());
 
         scrollY += controller.bindings().VMOUSE_SCROLL_UP.state() - controller.bindings().VMOUSE_SCROLL_DOWN.state();
 
@@ -265,11 +275,36 @@ public class VirtualMouseHandler {
     }
 
     private void setMousePosition() {
-        GLFW.glfwSetCursorPos(
-                minecraft.getWindow().getWindow(),
-                targetX,
-                targetY
-        );
+        // glfwSetCursorPos runs the real GLFW callback, which would drop controller mode.
+        synthesizingCursor = true;
+        try {
+            GLFW.glfwSetCursorPos(
+                    minecraft.getWindow().getWindow(),
+                    targetX,
+                    targetY
+            );
+        } finally {
+            synthesizingCursor = false;
+        }
+    }
+
+    public boolean isSynthesizingCursor() {
+        return synthesizingCursor;
+    }
+
+    /**
+     * Place the cursor on a GUI-space point and tell Minecraft immediately.
+     * Slot hover is updated during render, so the next frame sees the new slot.
+     */
+    public void moveToGui(double guiX, double guiY) {
+        var window = minecraft.getWindow();
+        double screenW = Math.max(1, window.getScreenWidth());
+        double screenH = Math.max(1, window.getScreenHeight());
+        double guiW = Math.max(1, window.getGuiScaledWidth());
+        double guiH = Math.max(1, window.getGuiScaledHeight());
+        targetX = currentX = Mth.clamp(guiX * screenW / guiW, 0, screenW);
+        targetY = currentY = Mth.clamp(guiY * screenH / guiH, 0, screenH);
+        ((MouseHandlerAccessor) minecraft.mouseHandler).invokeOnMove(window.getWindow(), currentX, currentY);
     }
 
     public boolean requiresVirtualMouse() {
@@ -330,10 +365,20 @@ public class VirtualMouseHandler {
     }
 
     public int getCurrentX(float deltaTime) {
-        return (int) Mth.lerp(deltaTime, currentX, targetX);
+        return toGuiX(Mth.lerp(deltaTime, currentX, targetX));
     }
 
     public int getCurrentY(float deltaTime) {
-        return (int) Mth.lerp(deltaTime, currentY, targetY);
+        return toGuiY(Mth.lerp(deltaTime, currentY, targetY));
+    }
+
+    private int toGuiX(double screenX) {
+        var window = minecraft.getWindow();
+        return (int) (screenX * window.getGuiScaledWidth() / (double) Math.max(1, window.getScreenWidth()));
+    }
+
+    private int toGuiY(double screenY) {
+        var window = minecraft.getWindow();
+        return (int) (screenY * window.getGuiScaledHeight() / (double) Math.max(1, window.getScreenHeight()));
     }
 }

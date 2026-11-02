@@ -10,6 +10,7 @@ import dev.isxander.controlify.utils.NavigationHelper;
 import dev.isxander.controlify.virtualmouse.VirtualMouseBehaviour;
 import dev.isxander.controlify.virtualmouse.VirtualMouseHandler;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.AbstractSelectionList;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
@@ -37,6 +38,8 @@ public class ScreenProcessor<T extends Screen> {
 
             if (!handleComponentButtonOverride(controller))
                 handleButtons(controller);
+
+            handleScroll(controller);
         } else {
             handleScreenVMouse(controller, Controlify.instance().virtualMouseHandler());
         }
@@ -61,37 +64,14 @@ public class ScreenProcessor<T extends Screen> {
     }
 
     /**
-     * 1.19.2 has {@code changeFocus(boolean)} and no arrow-key {@code ComponentPath}.
-     * Directional GUI navigation is phase 2. This walks the existing focus cycle so a
-     * screen does not throw when a controller is used.
+     * Move focus to the nearest widget in the stick direction. Lists move row by row.
      */
     protected void handleComponentNavigation(Controller<?, ?> controller) {
         if (screen.getFocused() == null)
             setInitialFocus();
 
-        var bindings = controller.bindings();
-        boolean repeatEventAvailable = navigationHelper.canNavigate();
-        Boolean forward = null;
-
-        if (bindings.GUI_NAVI_RIGHT.held() && (repeatEventAvailable || !bindings.GUI_NAVI_RIGHT.prevHeld())) {
-            forward = true;
-            if (!bindings.GUI_NAVI_RIGHT.prevHeld())
-                navigationHelper.reset();
-        } else if (bindings.GUI_NAVI_LEFT.held() && (repeatEventAvailable || !bindings.GUI_NAVI_LEFT.prevHeld())) {
-            forward = false;
-            if (!bindings.GUI_NAVI_LEFT.prevHeld())
-                navigationHelper.reset();
-        } else if (bindings.GUI_NAVI_DOWN.held() && (repeatEventAvailable || !bindings.GUI_NAVI_DOWN.prevHeld())) {
-            forward = true;
-            if (!bindings.GUI_NAVI_DOWN.prevHeld())
-                navigationHelper.reset();
-        } else if (bindings.GUI_NAVI_UP.held() && (repeatEventAvailable || !bindings.GUI_NAVI_UP.prevHeld())) {
-            forward = false;
-            if (!bindings.GUI_NAVI_UP.prevHeld())
-                navigationHelper.reset();
-        }
-
-        if (forward != null && screen.changeFocus(forward)) {
+        FocusNavigator.Direction direction = FocusNavigator.readDirection(controller, navigationHelper);
+        if (direction != null && FocusNavigator.move(screen, direction)) {
             navigationHelper.onNavigate();
 
             if (Controlify.instance().config().globalSettings().uiSounds)
@@ -101,6 +81,30 @@ public class ScreenProcessor<T extends Screen> {
             if (focused != null)
                 ComponentProcessorProvider.provide(focused).onFocusGained(this, controller);
         }
+    }
+
+    /**
+     * Right stick scrolls the focused list, or the screen if it has no list.
+     */
+    protected void handleScroll(Controller<?, ?> controller) {
+        double delta = controller.bindings().VMOUSE_SCROLL_DOWN.state() - controller.bindings().VMOUSE_SCROLL_UP.state();
+        if (Math.abs(delta) < 0.2) {
+            return;
+        }
+
+        if (screen.getFocused() instanceof AbstractSelectionList<?> focusedList) {
+            focusedList.setScrollAmount(focusedList.getScrollAmount() + delta * 10);
+            return;
+        }
+
+        for (GuiEventListener child : screen.children()) {
+            if (child instanceof AbstractSelectionList<?> list) {
+                list.setScrollAmount(list.getScrollAmount() + delta * 10);
+                return;
+            }
+        }
+
+        screen.mouseScrolled(minecraft.getWindow().getGuiScaledWidth() / 2.0, minecraft.getWindow().getGuiScaledHeight() / 2.0, -delta);
     }
 
     protected void handleButtons(Controller<?, ?> controller) {
@@ -160,7 +164,15 @@ public class ScreenProcessor<T extends Screen> {
 
     protected void setInitialFocus() {
         if (screen.getFocused() == null && Controlify.instance().currentInputMode() == InputMode.CONTROLLER && !Controlify.instance().virtualMouseHandler().isVirtualMouseEnabled()) {
-            screen.changeFocus(true);
+            for (GuiEventListener child : screen.children()) {
+                if (FocusNavigator.focusable(child)) {
+                    screen.setFocused(child);
+                    break;
+                }
+            }
+            if (screen.getFocused() == null) {
+                screen.changeFocus(true);
+            }
             navigationHelper.clearDelay();
         }
     }
@@ -173,7 +185,16 @@ public class ScreenProcessor<T extends Screen> {
         if (screen.getFocused() == null) return new ArrayDeque<>();
 
         var tree = new ArrayDeque<GuiEventListener>();
-        var focused = screen.getFocused();
+        GuiEventListener focused = screen.getFocused();
+        if (focused instanceof AbstractSelectionList<?> list) {
+            GuiEventListener entry = list.getFocused();
+            if (entry == null) {
+                entry = list.getSelected();
+            }
+            if (entry != null) {
+                focused = entry;
+            }
+        }
         tree.add(focused);
         while (focused instanceof CustomFocus customFocus) {
             focused = customFocus.getCustomFocus();

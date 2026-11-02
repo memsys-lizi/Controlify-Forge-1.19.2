@@ -4,7 +4,7 @@ This is an **unofficial** port of Controlify 1.2.1 (Fabric, Minecraft 1.19.4, ta
 
 The mod display name is **Controlify (Unofficial Forge 1.19.2 Port)**.
 
-Phase 0 is a bootable jar. Phase 1 wires controller gameplay through Forge `KeyMapping`. Virtual-mouse navigation, rumble, and the config screen are still later phases.
+Phase 0 is a bootable jar. Phase 1 wires controller gameplay through Forge `KeyMapping`. Phase 2 adds virtual-mouse navigation. Rumble and the config screen are still later phases.
 
 ## What phase 0 changed
 
@@ -14,7 +14,7 @@ Phase 0 is a bootable jar. Phase 1 wires controller gameplay through Forge `KeyM
 - Config stays JSON at `<game dir>/config/controlify.json` (`FMLPaths.CONFIGDIR`). There is no config screen. YACL 2.x has no Forge 1.19.2 build, so it was removed. `startYACLOption()` was removed from the binding API.
 - Sodium, Iris, and Mod Menu compatibility code was deleted. ImmediatelyFast is a no-op (`IMMEDIATELY_FAST` is always false); there is no Forge 1.19.2 compile dependency.
 - GUI calls were lowered to the 1.19.2 API: `Button` constructors (no `Button.builder`), no `Tooltip`, no `ComponentPath` / `FocusNavigationEvent` / `ScreenDirection` / `InputType` / `TabNavigationBar` / `GridLayout`. Widgets use public `x` / `y` fields. `Renderable` is `Widget`.
-- Screen navigation is a stub. `ScreenProcessor` calls `changeFocus` and clears focus. Tab navigation does nothing. Full UI navigation is phase 2.
+- Screen navigation started as a stub (`changeFocus` only). Phase 2 replaces that with `FocusNavigator`. Tab navigation still does nothing because `TabNavigationBar` does not exist.
 - Sounds use a Forge `DeferredRegister` (`controlify:controlify.ui.focus`). The extra mappings pack is format 9 and is added with `AddPackFindersEvent`.
 - `NameableEnum` moved to `dev.isxander.controlify.utils.NameableEnum` (`getDisplayName` only).
 - Client init runs from `ControlifyForge` only when `Dist.CLIENT`. All mixins are in the client array, and the mixin plugin refuses them on a dedicated server.
@@ -88,7 +88,7 @@ About 80 mixins were checked against 1.19.2. Ones that target classes or members
 - `feature.screenop.ScreenMixin` injects at the return of `rebuildWidgets`. On 1.19.2, `Screen.init(Minecraft, int, int)` calls `rebuildWidgets()` (which calls `init()`), so the 1.19.4 inject after `init()` had nothing to hit.
 - `core.ClientPacketListenerMixin` and `feature.guide.ingame.ClientPacketListenerMixin` inject after the `PUTFIELD` that stores `LocalPlayer.input`. 1.19.2 writes the new `KeyboardInput` to that field.
 - `feature.guide.screen.AbstractWidgetMixin` / `AbstractButtonMixin` draw button guides from `renderButton`. 1.19.2 has no `renderScrollingString`, so the scrolling-label shift is gone.
-- `feature.screenop.ScreenProcessor` does not do 1.19.4 `ComponentPath` navigation.
+- `feature.screenop.ScreenProcessor` uses `FocusNavigator` instead of 1.19.4 `ComponentPath`. `TabNavigationBar` is still absent.
 - `feature.screenop.GameRendererMixin` and `feature.virtualmouse.GameRendererMixin` inject after `ForgeHooksClient.drawScreen` and allocate a new `PoseStack` for the overlay.
 - `feature.rumble.blockbreak.MultiPlayerGameModeMixin` injects Forge's patched `lambda$startDestroyBlock$1` (the lambda takes `PlayerInteractEvent.LeftClickBlock`). That name is the same in the official and SRG Forge jars, so it is not in the refmap. If a future Forge build renames it, block-break rumble will fail to apply and the game will not boot until the inject is updated.
 - `ContainerButtonGuide.setup()` is still never called (same as upstream 1.2.1). The class was ported to Forge screen events so it compiles.
@@ -105,10 +105,20 @@ Controller gameplay uses the 1.2.1 binds (left stick move, right stick look, tri
 - Hotbar bumpers call `Inventory.swapPaint`. Spectator mode also notifies the spectator hotbar. Slots 1–9 stay keyboard keys.
 - Pause calls `pauseGame`. It is not a `KeyMapping`.
 
+## Phase 2: virtual mouse and GUI navigation
+
+1.19.2 has `changeFocus(boolean)` only. There is no `ComponentPath`, `InputType`, or `TabNavigationBar`.
+
+- `FocusNavigator` moves to the nearest active widget in the stick direction. Lists move one row at a time (`setSelected` and `setFocused`) and scroll that row into view. At either end of a list, the next press leaves the list for a neighbouring widget.
+- Sliders have no `canChangeValue`. `AbstractSliderButtonMixin` toggles an adjust mode on GUI press: left and right then call `keyPressed`, and GUI back leaves adjust mode. The old mixin that called `InputType` stays in `src/port-disabled`.
+- The virtual cursor is window pixels. `getCurrentX` / `getCurrentY` return GUI coordinates, which is what container hit-tests expect. `glfwSetCursorPos` is marked synthetic so the real GLFW callback does not switch back to keyboard-and-mouse mode.
+- Screens that ask for `CURSOR_ONLY` (containers) do not free-move the cursor with the stick and do not snap on stick release. The left stick steps between active slot centers and visible widgets. Pickup, quick move, take half, drop, and swap hands still click the hovered slot. The right stick still scrolls through the virtual mouse. BACK is not the virtual-mouse toggle, so opening an inventory does not toast that the virtual mouse is unavailable.
+- Create World (`GridLayout`) and `TabNavigationBar` stay disabled.
+
 ## Later phases (not in this change)
 
 1. Movement, look, attack, place, and hotbar are in phase 1.
-2. Virtual mouse and GUI navigation (the 1.19.4 focus API has to be rebuilt; `TabNavigationBar` and Create World stay disabled until then).
+2. Virtual mouse and GUI navigation are in phase 2. Create World and tab bars stay disabled.
 3. Button hints, rumble (this is the part players care about most), reach-around assist.
 4. Config screen (no YACL on this Forge version; a Forge or handmade screen).
 5. Integration pass.
